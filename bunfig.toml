@@ -1,0 +1,11 @@
+[install]
+# Versions exactes : sans ceci, `bun add` écrit une plage `^` (CLAUDE.md §7).
+exact = true
+# Les peer dependencies ne sont pas installées d'office. bun-plugin-tailwind déclare `bun` en peer :
+# installé, un binaire Bun arrivait dans node_modules/.bin et remplaçait le Bun système dans chaque
+# `bun run` — constat fait dans MaskAILawyer-AnalyzerAudioService/test-app/bunfig.toml.
+peer = false
+
+[serve.static]
+# Tailwind v4 pour la page que Bun bundle à la volée en développement (server/dev.ts).
+plugins = ["bun-plugin-tailwind"]

@@ -1,0 +1,2014 @@
+/* Copie de MaskAI-Frontend/app/globals.css, commit 40f75a965409dad9fd25da187aaf90e74fa2133d
+   (2026-09-18), identique à l'original le 2026-09-24. MaskAI-Frontend possède ces jetons de design :
+   les recopier ici est une exception écrite à CLAUDE.md §6.1, acceptée le 2026-09-24 (voir
+   docs/ARCHITECTURE.md). Cette copie ne suit pas les évolutions de l'original.
+   Conservée telle quelle entre ce commentaire et le bloc « AJOUT PIPLINER » final, au-delà de la
+   limite de 400 lignes (§3.1), pour que `diff` contre l'original montre exactement la dérive. */
+@import "tailwindcss";
+/* Utilitaires `animate-in` / `fade-in-0` / `zoom-in-95` / `slide-in-from-*`
+   dont dépendent les surfaces Radix (dialog, sheet, popover, dropdown…).
+   Ils n'existent PAS dans le noyau Tailwind v4 : sans cet import, chaque
+   ouverture/fermeture devient une coupe franche, SANS erreur nulle part. */
+@import "tw-animate-css";
+
+/* La variante `dark:` native de Tailwind v4 écoute `prefers-color-scheme`.
+   Ici le thème est piloté par la CLASSE `.dark` (PreferencesProvider la pose
+   dans les TROIS chemins sombres, y compris « system » + OS sombre, cf. le
+   commentaire du bloc dark plus bas). Sans ce `@custom-variant`, tout
+   `dark:` shadcn réagirait au thème de l'OS et non à celui de l'app —
+   silencieusement, et dans le mauvais sens.
+   `:where()` plutôt que `:is()` : spécificité nulle, donc la variante ne
+   peut pas prendre le pas sur un utilitaire voisin. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Couleur de bordure par défaut.
+   Tailwind v4 a changé le défaut de `border` : ce n'était plus `gray-200`
+   (v3) mais `currentColor`. Toute classe `border` SANS couleur explicite
+   dessinait donc un filet de la couleur du TEXTE — donc marine foncé sur les
+   cards, les inputs et les tables. Le gabarit shadcn compense avec un
+   `@layer base { * { @apply border-border } }` que ce fichier n'a jamais eu :
+   les composants générés écrivent `rounded-xl border` et comptent dessus.
+   11 fichiers applicatifs étaient déjà touchés depuis la montée en v4.
+   Dans `@layer base` pour que tout utilitaire `border-*` garde le dessus. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border);
+  }
+}
+
+/* ╔═══════════════════════════════════════════════════════════════════════
+   ║ MASKAI · Design Tokens — Mercury × Linear
+   ║ Référence : wiki/business/brief-claude-design-app.md §3
+   ║
+   ║ Système 3 niveaux (du général au spécifique) :
+   ║
+   ║   1. BRAND  — Identité visuelle MASKAI, essentiellement invariants
+   ║               mais le marine s'éclaircit en dark pour contraste AA.
+   ║       --marine-{600..900}    CTA / accent / titres
+   ║       --jaune-ue             PII chirurgical (signature ≤5% surface)
+   ║       --jaune-ue-soft        Fond bandeau Anonymisé
+   ║       --premium              Marqueur d'OFFRE (étoile « premium »)
+   ║       --premium-soft         Fond de la pastille premium
+   ║       --shield-blue          Logo (eyebrow IA, sidebar, signature)
+   ║       --signal-success       Status PASS (vert)
+   ║       --signal-danger        Status BLOCK/ERROR (rouge)
+   ║       --signal-warning       Status HIGH RISK (jaune ambre)
+   ║       --signal-*-text        Variantes assombries WCAG AA (11px+ AA)
+   ║       --signal-*-soft        Variantes alpha pour fonds badges
+   ║
+   ║   2. SEMANTIC — Couche que les composants DOIVENT utiliser.
+   ║                 Theme-aware (light → dark via remappage natif).
+   ║       --background           Page bg (h-screen wrappers)
+   ║
+   ║       ÉCHELLE DE SURFACES — ordre garanti dans les DEUX thèmes :
+   ║           secondary  <  surface  <  hover  ≤  elevated
+   ║       --surface-secondary    EN CREUX : rails, <th> sticky, chips,
+   ║                              pistes de progression, code inline
+   ║       --surface              Plan de référence : cards, panneaux,
+   ║                              bulles, composer
+   ║       --surface-hover        Survol de ligne/item (s'assombrit en
+   ║                              light, s'ÉCLAIRCIT en dark)
+   ║       --surface-elevated     EN RELIEF : popovers, menus, modales,
+   ║                              drawers. En dark c'est le palier de
+   ║                              clarté qui PORTE la profondeur — une
+   ║                              ombre noire y est invisible (1.04:1).
+   ║
+   ║       --foreground           Body text défaut (= text-primary)
+   ║       --text-primary         Titres + body sombre
+   ║       --text-secondary       Sub-text + descriptions
+   ║       --text-tertiary        Captions, labels mineurs — AA sur --surface
+   ║                              seulement (4.52:1) ; jamais pour du texte
+   ║                              essentiel posé sur --background
+   ║       --text-inverse         Texte sur fond accent CTA (= blanc light)
+   ║       --text-link            Liens internes (= marine clair light)
+   ║       --text-brand           Titres/valeurs de marque. SÉPARÉ de
+   ║                              --marine-900 : ce dernier est un FOND en
+   ║                              dark (bleu), illisible en texte (3.47:1)
+   ║       --border               Border subtle (cards au repos) — filet
+   ║                              décoratif, ~1.3:1 assumé
+   ║       --border-strong        Border hover/active (visible)
+   ║       --border-control       Bord d'input/select — tenu à ≥3:1, car
+   ║                              le bord EST l'affordance (WCAG 1.4.11)
+   ║       --border-focus         Focus ring (= accent)
+   ║       --primary              CTA primary FILL (= marine-900 light)
+   ║       --primary-hover        CTA primary hover (= marine-800 light)
+   ║       --primary-soft         Primary fill tinted (badges, bannières)
+   ║       --ring                 Anneau de focus (bleu charte, cf. WCAG)
+   ║       --primary-text         Primary utilisé comme TEXTE (--primary seul
+   ║                              ne passe pas AA en texte sur dark)
+   ║       --tooltip-bg/-fg       Tooltip natifs (FIXES sombres, no flip)
+   ║       --backdrop-overlay     Modal/drawer backdrop (FIXE sombre)
+   ║
+   ║       AJOUTS « PUPITRE » (cf. lib/motion.ts pour le pendant JS) :
+   ║       --indicator            Curseur de stream, points « réflexion »,
+   ║                              soulignement d'onglet (bleu charte)
+   ║       --surface-glass        Chrome translucide (.chrome, barres sticky)
+   ║       --elev-glass / -glow   Ombre du chrome / halo bleu d'accent
+   ║       --glow-shield          Lueur bleu logo (Glow, hero)
+   ║       --chart-grid           Grille data-viz (= --border à 70 %)
+   ║       --on-dark(-muted/-hairline)  Sur fond TOUJOURS sombre (FIXES)
+   ║       --skeleton-base/-sheen Squelettes (suivent --text-primary)
+   ║       --ease-emphasized / --ease-spring / --duration-hero / -stagger / -sweep
+   ║
+   ║   3. SCALE — Échelle neutre, idéalement non exposée aux composants.
+   ║              Conservée pour migrations + cas spécifiques.
+   ║       --stripe-{50..900}     Gris froid (light) / remap dark
+   ║
+   ║ ─────────────────────────────────────────────────────────────────
+   ║ Conventions composants — UTILISER LES TOKENS SÉMANTIQUES
+   ║ ─────────────────────────────────────────────────────────────────
+   ║
+   ║   ⚠ Les jetons `--stripe-*` ne sont PAS redéfinis en dark. Y pointer
+   ║     directement donne du texte sombre sur fond sombre. Toujours passer
+   ║     par la couche sémantique.
+   ║
+   ║   FOND :
+   ║     bg-white            → bg-surface         (cards, inputs, modals)
+   ║     bg-stripe-50        → bg-background      (page wrapper)
+   ║     bg-stripe-100       → bg-surface-secondary (en creux)
+   ║     hover:bg-background → hover:bg-surface-hover (sinon la ligne
+   ║                           s'ENFONCE au survol en dark)
+   ║
+   ║   TEXTE :
+   ║     text-stripe-900     → text-text-primary  (titres, body)
+   ║     text-stripe-700     → text-text-primary  (body alt)
+   ║     text-stripe-500     → text-text-secondary (sub-text)
+   ║     text-stripe-400     → text-text-tertiary (captions)
+   ║     text-white sur CTA  → text-text-inverse  (sémantique claire)
+   ║     text-marine-900     → text-text-brand    (cf. --text-brand)
+   ║
+   ║   BORDERS :
+   ║     border-stripe-200   → border-border      (subtle)
+   ║     border-stripe-300   → border-border-strong (visible)
+   ║     bord d'input        → border-border-control (≥3:1)
+   ║
+   ║   BRAND (gardent les classes brand) :
+   ║     bg-marine-900       → reste (CTA primary — FOND uniquement)
+   ║     bg-jaune-ue-soft    → reste (bandeau Anonymisé)
+   ║     text-signal-{success,danger,warning}-text  (texte status WCAG AA)
+   ║
+   ║ ─────────────────────────────────────────────────────────────────
+   ║ Theme awareness — 3 modes via PreferencesProvider
+   ║ ─────────────────────────────────────────────────────────────────
+   ║   data-theme="light"    Défaut MASKAI (Stripe européen lumineux)
+   ║   data-theme="dark"     Marine night — adapté longues sessions
+   ║   data-theme="system"   Honore prefers-color-scheme de l'OS
+   ║   .dark (legacy)        Classe ajoutée par PreferencesProvider en
+   ║                         dark, conservée pour backward compat
+   ║                         ThemeProvider Ahmed.
+   ╚═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Marine UE — monolithique sur titres, CTA primaire, sidebar header */
+  --marine-900: #0a1f44;
+  --marine-800: #142d5a;
+  --marine-700: #1a3aa8;
+  --marine-600: #2849c7;
+
+  /* Bleu logo — bleu charte officiel #41abfc (sidebar icône, accents tech) */
+  --shield-blue: #41abfc;
+  --shield-blue-soft: #e7f3ff;
+  /* Pas de bleu logo PUR en light dès qu'il porte du contraste : #41abfc ne
+     fait que 2,48:1 sur blanc et 2,40:1 sur --background — sous le plancher
+     de 3:1 (WCAG 1.4.11, indicateurs) comme sous celui de 4,5:1 (texte).
+     Ce palier assombri de la MÊME teinte tient 4,22:1 et reste lisiblement
+     le bleu de la charte. En dark, --ring repasse au #41abfc pur (7,07:1).
+     Même raisonnement que --text-link, marine-700 en light / bleu en dark. */
+  --shield-blue-deep: #0d7fd1;
+
+  /* Jaune UE — chirurgical (≤5% surface) : tokens PII, badges AI Act */
+  --jaune-ue: #ffcc00;
+  --jaune-ue-soft: #fff4b8;
+
+  /* Premium — marqueur d'OFFRE (étoile des outils réservés à une offre).
+     Violet parce qu'il ne doit imiter AUCUN jeton existant : ni un statut
+     (--signal-*), ni la marque (--marine-*), ni le jaune PII réservé aux
+     placeholders (cf. .pii-token-reveal). Teinte 272°, soit 54° du marine
+     (218°) et 90° du rouge d'erreur (0°).
+     #7e22ce tient 6,98:1 sur --surface, 6,39:1 sur --background et 5,94:1
+     sur --surface-secondary : AA en TEXTE sur les trois paliers.
+     Le `-soft` suit la convention des signaux — un alpha de la couleur
+     pleine, jamais un violet clair figé — pour se poser sur n'importe quel
+     palier de surface. */
+  --premium: #7e22ce;
+  --premium-soft: rgba(126, 34, 206, 0.10);
+
+  /* Séries data-viz (courbes de consommation) — paire catégorielle bleu/orange
+     validée CVD + contraste (cf skill dataviz). Distincte des tokens de statut :
+     une couleur de série n'usurpe jamais un signal. */
+  --chart-series-in: #2a78d6;  /* jetons entrée */
+  --chart-series-out: #eb6834; /* jetons sortie */
+
+  /* Note charte : les colorways du logo (MaskaiShield) lisent directement les
+     tokens sémantiques theme-aware — navy=--marine-900, blue=--shield-blue
+     (#41abfc), yellow=--jaune-ue, green=--signal-success, red=--signal-danger,
+     gray=--stripe-200. Pas de tokens dédiés pour éviter la duplication. */
+
+  /* Stripe gris — fonds, bordures, texte */
+  --stripe-50: #fafbfc;
+  --stripe-100: #f4f6fa;
+  --stripe-200: #e3e8ee;
+  --stripe-300: #d4dae3;
+  --stripe-400: #a3acba;
+  --stripe-500: #697386;
+  --stripe-700: #3c4453;
+  --stripe-900: #1a1f36;
+
+  /* Signaux — sémantique stricte (jamais décoratif).
+     Les `*-text` variantes sont assombries pour WCAG AA en texte 11-14px
+     (le `signal-success` `#10b981` ne passe pas en texte sur fond clair). */
+  --signal-success: #10b981;
+  --signal-success-text: #047857;
+  --signal-success-soft: rgba(16, 185, 129, 0.08);
+  --signal-warning: #f59e0b;
+  --signal-warning-text: #b45309;
+  --signal-warning-soft: rgba(245, 158, 11, 0.10);
+  --signal-danger: #dc2626;
+  --signal-danger-text: #b91c1c;
+  --signal-danger-soft: rgba(220, 38, 38, 0.08);
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Sémantique applicative — héritée des tokens brand ci-dessus.
+
+     ORDRE DES SURFACES (invariant à respecter dans les DEUX thèmes) :
+         secondary  <  surface  <  hover  ≤  elevated
+     « secondary » est EN CREUX (rails, en-têtes de table sticky, pistes de
+     progression, chips) ; « elevated » est EN RELIEF (popovers, menus,
+     modales, drawers). En light c'est naturel (f4f6fa < ffffff) ; en dark
+     l'ancien ramp l'avait inversé — d'où la sidebar et tous les en-têtes de
+     table qui ressortaient comme les blocs les plus clairs de l'écran.
+     ─────────────────────────────────────────────────────────────────── */
+  /* La page est volontairement PLUS SOMBRE que les cards : c'est ce qui les
+     fait exister. #fafbfc ne laissait que ~2% d'écart avec le blanc. */
+  --background: #f2f5f9;
+  --foreground: var(--stripe-900);
+  --surface-secondary: #e8edf5;             /* en creux : rails, th, chips */
+  --surface: #ffffff;
+  --surface-hover: #edf1f8;                 /* survol de ligne — s'assombrit */
+  --surface-elevated: #ffffff;              /* en relief (+ ombre) */
+
+  /* Chrome translucide (.chrome : barres sticky, en-têtes de vue). Alpha sur
+     --surface pour que le contenu qui défile dessous reste devinable. */
+  --surface-glass: color-mix(in srgb, var(--surface) 82%, transparent);
+
+  --border: var(--stripe-200);
+  --border-strong: var(--stripe-300);
+  /* Bordure de CONTRÔLE (inputs/selects) — doit tenir 3:1 (WCAG 1.4.11 :
+     le bord EST l'affordance). Les filets décoratifs, eux, restent discrets. */
+  --border-control: var(--stripe-300);
+  --border-focus: var(--marine-900);
+
+  --text-primary: var(--stripe-900);
+  /* ⚠ Ces deux paliers ne pointent plus sur --stripe-500 / --stripe-400.
+     Sur la page assombrie, --stripe-500 (#697386) tombait à 4,37:1 — sous AA.
+     Et --stripe-400 (#a3acba) ne faisait que 2,29:1 sur blanc : l'en-tête de
+     ce fichier annonçait « AA >=4.5:1 ✓ » pour --text-tertiary, ce qui était
+     faux sur ses ~150 usages. Valeurs re-dérivées :
+       secondary 5,15:1 sur la page · 4,79:1 sur le palier en creux
+       tertiary  4,52:1 sur --surface (contre 2,29 avant)
+     `tertiary` reste réservé aux mentions accessoires : il ne tient pas AA
+     sur le palier en creux, la hiérarchie s'y fait au poids et à la taille. */
+  --text-secondary: #5e6879;
+  --text-tertiary: #6d7789;
+  --text-inverse: #ffffff;
+  --text-link: var(--marine-700);
+  /* Texte de marque — rôle SÉPARÉ de --marine-900 (qui est un fond/trait).
+     En light les deux coïncident ; en dark --marine-900 devient un bleu de
+     remplissage (3.47:1 en texte = échec AA), d'où ce jeton dédié. */
+  --text-brand: var(--marine-900);
+
+  /* Remplissage du CTA. Renommé `accent` -> `primary` lors du passage à
+     shadcn : là-bas `accent` désigne une surface de SURVOL, pas un CTA.
+     Valeurs inchangées — le renommage est visuellement neutre. */
+  --primary: var(--marine-900);
+  --primary-hover: var(--marine-800);
+  --primary-soft: rgba(10, 31, 68, 0.06);
+  --primary-text: var(--marine-700);        /* primary utilisé comme TEXTE */
+
+  /* Indicateur — curseur de streaming, points « réflexion », soulignement
+     d'onglet actif. Bleu charte assombri en light (4,22:1), pur en dark :
+     --marine-900 y est un FOND bleu et lisait comme un curseur noir. */
+  --indicator: var(--shield-blue-deep);
+
+  /* Compat — shields legacy (chat existant) mappés aux signaux brand */
+  --shield-green: var(--signal-success);
+  --shield-green-soft: var(--signal-success-soft);
+  --shield-yellow: var(--jaune-ue);
+  --shield-red: var(--signal-danger);
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Rayons — échelle « soft » : 12px contrôles / 16px surfaces.
+     Source unique : ces deux jetons alimentent `--radius-md` / `--radius-lg`
+     dans @theme, donc TOUS les `rounded-md` / `rounded-lg` de l'app se
+     retaillent d'ici. `--r-control` est density-aware (cf. bloc density) —
+     à 28px de hauteur de ligne (compact), 12px lirait presque en gélule.
+     ─────────────────────────────────────────────────────────────────── */
+  --r-control: 12px;  /* boutons, inputs, selects, items de menu */
+  --r-card: 16px;     /* cards, popovers, dropdowns */
+  /* Alias inerte — quelques items du registre shadcn lisent `var(--radius)`
+     en dur. L'échelle réelle reste `--radius-xs..3xl` dans @theme, qui est
+     density-aware ; rien d'autre ne doit lire ce jeton. */
+  --radius: var(--r-card);
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Élévation — ombres en DEUX couches (contact serré + ambiante diffuse).
+     Une seule couche suffisait à 6px de rayon ; à 12/16px une card à plat
+     lit comme un autocollant. Nom `--elev-*` et pas `--shadow-*` : @theme
+     possède le namespace `--shadow-*` pour générer les utilitaires
+     `shadow-card` / `shadow-popover` / … (cf. bloc @theme inline).
+     ─────────────────────────────────────────────────────────────────── */
+  --elev-cta: 0 1px 2px rgba(10, 31, 68, 0.08),
+    0 1px 3px rgba(10, 31, 68, 0.06);
+  --elev-cta-hover: 0 2px 4px rgba(10, 31, 68, 0.10),
+    0 6px 12px rgba(10, 31, 68, 0.10);
+  /* Deux couches, teintées à l'encre de marque et jamais au noir pur. Les
+     valeurs d'avant (0.04 / 0.05) étaient sous le seuil du visible sur un fond
+     à 2% d'écart : les cards étaient à plat. */
+  --elev-card: 0 1px 3px rgba(10, 31, 68, 0.07),
+    0 6px 16px rgba(10, 31, 68, 0.07);
+  --elev-popover: 0 4px 8px rgba(10, 31, 68, 0.07),
+    0 16px 32px rgba(10, 31, 68, 0.14);
+  --elev-toast: 0 4px 10px rgba(10, 31, 68, 0.06),
+    0 16px 32px rgba(10, 31, 68, 0.10);
+  --elev-modal: 0 8px 20px rgba(10, 31, 68, 0.08),
+    0 32px 64px rgba(10, 31, 68, 0.14);
+  /* Chrome et mise en avant. `glass` : liseré + ambiante douce sous une barre
+     translucide ; `glow` : halo bleu charte (carte active, hero). */
+  --elev-glass: 0 0 0 1px rgba(10, 31, 68, 0.06),
+    0 8px 24px rgba(10, 31, 68, 0.08);
+  --elev-glow: 0 0 0 1px color-mix(in srgb, var(--shield-blue-deep) 55%, transparent),
+    0 0 0 4px rgba(13, 127, 209, 0.10),
+    0 8px 28px rgba(13, 127, 209, 0.10);
+  /* Lueur bleu logo (composant Glow, hero) — plus dense en dark. */
+  --glow-shield: rgba(65, 171, 252, 0.16);
+
+  /* Tooltip background fixe sombre (ne flip pas en dark) — utilisé pour
+     les tooltips natifs (.pii-token reveal). En light = stripe-900 sombre,
+     en dark = même valeur (le tooltip doit toujours contraster avec son
+     contexte clair/dark adjacent). */
+  --tooltip-bg: #1a1f36;
+  --tooltip-fg: #ffffff;
+
+  /* Backdrop modal/drawer — overlay sombre fixe (ne flip pas en dark).
+     En light : voile marine subtle. En dark : noir doux pour darken bg. */
+  --backdrop-overlay: rgba(10, 31, 68, 0.28);
+
+  /* Grille data-viz — filet à 70 % de --border, suit le thème par indirection. */
+  --chart-grid: color-mix(in srgb, var(--border) 70%, transparent);
+
+  /* Texte et filet posés sur un fond TOUJOURS sombre (hero marine, en-tête
+     de sidebar, écran de logo). FIXES : ne flipent pas en dark. */
+  --on-dark: #f4f6fa;
+  --on-dark-muted: rgba(244, 246, 250, 0.62);
+  --on-dark-hairline: rgba(244, 246, 250, 0.10);
+
+  /* Squelettes — dérivés de --text-primary, donc suivent le thème sans bloc
+     dark dédié (encre à 6 % au repos, 11 % au passage du reflet). */
+  --skeleton-base: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --skeleton-sheen: color-mix(in srgb, var(--text-primary) 11%, transparent);
+
+  /* Focus ring — accessibilité WCAG AA.
+     Halo diffus teinté accent plutôt que double anneau dur : à 12/16px de
+     rayon un anneau net de 2px se lit comme une bordure d'erreur. Le halo
+     3px reste ≥ 3:1 contre `--surface` (exigence WCAG 2.2 « focus not
+     obscured » / 1.4.11) tout en respirant avec les nouveaux rayons. */
+  /* Anneau de focus — désormais BLEU charte (cf. --shield-blue-deep). */
+  --ring: var(--shield-blue-deep);
+  --focus-halo: rgba(13, 127, 209, 0.16);
+  --focus-ring: 0 0 0 6px var(--focus-halo);
+
+  /* Easing curves — Emil Kowalski custom (les CSS natives manquent de punch) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Entrées « accentuées » (messages, login, hero) — c'était le 4e easing en
+     circulation sous forme de littéral ; il a désormais un nom. */
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Ressort en CSS pur — approximation `linear()` de SPRING_POP (lib/motion.ts),
+     pour les rares cas sans motion/react (badges, menus). */
+  --ease-spring: linear(0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%, 0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55.5%, 1.017 63.6%, 1.001);
+
+  /* Durées — l'app en portait ≈14 distinctes sans aucun jeton (100/140/150/
+     180/200/280/300/320/400/500/900ms…), alors que rayons, ombres et courbes
+     étaient méticuleusement tokenisés. Quatre paliers suffisent. */
+  --duration-fast: 120ms;    /* survol, changement de couleur */
+  --duration-base: 180ms;    /* opacité, apparition de popover */
+  --duration-slow: 260ms;    /* modales, panneaux */
+  --duration-drawer: 320ms;  /* glissement latéral (course plus longue) */
+  --duration-hero: 420ms;    /* révélation de thème, entrée hero */
+  --duration-sweep: 1.2s;    /* balayage indéterminé (Progress + filet ProgressHairline) */
+  --duration-stagger: 28ms;  /* pas entre deux items d'une liste (= STAGGER) */
+
+  /* Font stacks — Inter Variable + JetBrains Mono Variable self-hosted
+     (chargés via `@fontsource-variable/*` dans layout.tsx, EU-souverain) */
+  --font-inter: "Inter Variable", sans-serif;
+  --font-jetbrains: "JetBrains Mono Variable", monospace;
+
+  /* Archivo Variable — titres charte (ARCHIVO BOLD MAJ). Self-hosted via
+     `@fontsource-variable/archivo` dans layout.tsx (EU-souverain). */
+  --font-archivo: "Archivo Variable", sans-serif;
+  --font-display: var(--font-archivo), var(--font-inter), system-ui, sans-serif;
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Density tokens — défaut "cozy", overridés via html[data-density="..."].
+     Cible : sidebar items, lignes settings, chat messages, table admin
+     globale. La table admin a sa propre logique tableVariant qui peut
+     coexister (cumulable ou indépendante selon le composant).
+     ─────────────────────────────────────────────────────────────────── */
+  /* :root EST la branche « cozy » (il n'existe pas de bloc
+     html[data-density="cozy"]). Les trois paliers sont remontés d'un cran :
+     cozy porte ce que « comfortable » portait, compact ce que cozy portait.
+     Le réglage utilisateur garde donc son sens, l'app respire davantage. */
+  --row-height: 44px;             /* sidebar items, settings rows */
+  --row-padding-y: 0.75rem;       /* py-3 */
+  --row-padding-x: 1rem;          /* px-4 */
+  --message-padding-y: 1rem;      /* py-4 chat message wrapper */
+  --message-gap: 1rem;            /* gap-4 entre messages */
+}
+
+/* Density overrides — appliqués via attribut data-density sur <html>.
+   Le PreferencesProvider patche cet attribut dynamiquement. */
+html[data-density="compact"] {
+  --row-height: 36px;
+  --row-padding-y: 0.5rem;        /* py-2 */
+  --row-padding-x: 0.75rem;       /* px-3 */
+  --message-padding-y: 0.75rem;
+  --message-gap: 0.75rem;
+  /* Le palier compact vaut désormais 36px de ligne (et non 28) : 12px n'y
+     lit plus comme une gélule, on garde donc le rayon de contrôle nominal. */
+  --r-control: 12px;
+}
+html[data-density="comfortable"] {
+  --row-height: 52px;
+  --row-padding-y: 1rem;          /* py-4 */
+  --row-padding-x: 1.25rem;       /* px-5 */
+  --message-padding-y: 1.25rem;
+  --message-gap: 1.25rem;
+  --r-control: 14px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Dark mode — palette "marine night" (cohérente brand MASKAI).
+   Pas de pitch black (Mercury "warmer than pitch"), accent éclairci pour
+   contraste WCAG AA, jaune UE + bleu logo conservés (signature).
+   Selectors : `html.dark` (compat ThemeProvider legacy) et
+   `html[data-theme="dark"]` (nouveau PreferencesContext).
+   ─────────────────────────────────────────────────────────────────── */
+html.dark,
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Sémantique app — palette « marine night » désaturée.
+
+     Deux corrections structurelles vs l'ancien ramp :
+     1. ORDRE. Avant : surface #11192e < secondary #1a2444, donc la sidebar
+        et tous les <th> sticky (41 usages de bg-surface-secondary) étaient
+        les blocs les PLUS clairs de l'écran, alors qu'en light ils sont les
+        plus sombres. L'ordre creux→relief est maintenant identique aux deux
+        thèmes, sans toucher un seul composant.
+     2. CHROMA. L'ancien ramp montait en saturation avec la clarté (#1f2c54
+        ≈ 2,5× le chroma de #0a0e1a) : les surfaces hautes viraient au bleu
+        « lavé » et l'accent n'avait plus d'écart de teinte avec son fond.
+        Ici la teinte reste ~225°, le chroma DESCEND quand la clarté monte.
+     ─────────────────────────────────────────────────────────────────── */
+  --background: #0a0d16;            /* page                      L*  4 */
+  --foreground: #f4f6fa;
+  --surface-secondary: #0e121d;     /* en creux : rails, th      L*  7 */
+  --surface: #141926;               /* cards, bulles, composer   L* 11 */
+  --surface-hover: #1a2030;         /* survol — s'ÉCLAIRCIT      L* 14 */
+  --surface-elevated: #1c2233;      /* popovers, menus, modales  L* 16 */
+
+  --surface-glass: color-mix(in srgb, var(--surface-elevated) 76%, transparent);
+
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  /* Les filets décoratifs plafonnent ~1,3:1 et c'est correct (cf. Linear,
+     Stripe) : 1.4.11 vise les bords NÉCESSAIRES à identifier un composant.
+     Celui-ci en fait partie — il porte l'affordance d'un champ. */
+  --border-control: rgba(255, 255, 255, 0.34);
+  --border-focus: #5e80ff;
+
+  --text-primary: #f4f6fa;
+  --text-secondary: #a8b1c2;
+  --text-tertiary: #8a93a7;          /* 5.69:1 sur --surface — AA ✓ */
+  --text-inverse: #0a0e1a;
+  --text-link: var(--shield-blue);
+  /* Titres / valeurs / chiffres de marque. Remplace les 126 sites qui
+     utilisaient text-marine-900 et tombaient à 3.47:1 en dark. */
+  --text-brand: #dfe6f5;             /* 14.0:1 sur --surface */
+
+  /* Accent dark — assombri pour WCAG AA du texte BLANC posé sur le CTA
+     (#5e80ff donnait 3.50:1, #3d63ea donne 5.03:1). Valable en FOND
+     uniquement : en texte sur --surface ce même bleu ne fait que 3.47:1,
+     d'où --primary-text ci-dessous. */
+  --primary: #3d63ea;
+  --primary-hover: #5879f0;
+  --primary-soft: rgba(61, 99, 234, 0.16);
+  --primary-text: #8fa8ff;           /* 7.70:1 sur --surface */
+
+  --indicator: var(--shield-blue);   /* bleu logo pur : 7,07:1 sur --surface */
+
+  /* Backdrop overlay dark — sombre vrai (le marine éclairci aurait
+     éclairci au lieu d'assombrir) */
+  --backdrop-overlay: rgba(0, 0, 0, 0.55);
+
+  /* Marine sémantique CTA = assombrie en dark pour WCAG AA texte blanc.
+     Le brand identity reste marine, juste la teinte adapte au contraste. */
+  --marine-900: #3d63ea;
+  --marine-800: #2d50d8;
+  --marine-700: #5879f0;
+  --marine-600: #7a96ff;
+
+  /* Signaux éclaircis (text-* déjà bien contrastés sur dark) */
+  --signal-success: #34d399;
+  --signal-success-text: #6ee7b7;
+  --signal-success-soft: rgba(52, 211, 153, 0.14);
+  --signal-warning: #fbbf24;
+  --signal-warning-text: #fcd34d;
+  --signal-warning-soft: rgba(251, 191, 36, 0.14);
+  --signal-danger: #f87171;
+  --signal-danger-text: #fca5a5;
+  --signal-danger-soft: rgba(248, 113, 113, 0.14);
+
+  /* Jaune UE et bleu logo conservés (signature brand visible sur dark) */
+  --jaune-ue: #ffcc00;
+  --jaune-ue-soft: rgba(255, 204, 0, 0.14);
+  --shield-blue: #41abfc;
+  --shield-blue-soft: rgba(65, 171, 252, 0.16);
+
+  /* Premium éclairci — MÊME teinte (270°), clarté inversée comme --marine-*.
+     6,64:1 sur --surface, 5,99:1 sur --surface-elevated : AA en TEXTE.
+     ⚠ En dark c'est un TEXTE / un filet, JAMAIS un remplissage : du blanc
+     dessus ne fait que 2,64:1. La pastille reste donc `bg-premium-soft` +
+     `text-premium` dans les DEUX thèmes — une recette, aucun `dark:`. */
+  --premium: #c084fc;
+  --premium-soft: rgba(192, 132, 252, 0.16);
+
+  /* Séries data-viz — steps night de la paire bleu/orange (validés dark) */
+  --chart-series-in: #3987e5;
+  --chart-series-out: #d95926;
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Élévation dark = LISERÉ CLAIR, pas ombre noire.
+     rgba(0,0,0,.45) composité sur #0a0d16 donne 1.04:1 : mathématiquement
+     invisible. L'ancien commentaire « sur dark il faut + de contraste »
+     avait donc AUGMENTÉ l'opacité, ce qui rapproche encore de zéro — sur un
+     fond quasi noir une ombre n'a nulle part où aller.
+     Le vrai signal de profondeur en dark est le PALIER DE CLARTÉ
+     (--surface-elevated) ; le liseré le souligne, l'ombre ancre au sol.
+     ─────────────────────────────────────────────────────────────────── */
+  --elev-cta: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --elev-cta-hover: 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+  --elev-card: 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.4);
+  --elev-popover: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.6);
+  --elev-toast: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.6);
+  --elev-modal: 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 24px 64px rgba(0, 0, 0, 0.7);
+  --elev-glass: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+  --elev-glow: 0 0 0 1px color-mix(in srgb, var(--shield-blue) 60%, transparent),
+    0 0 0 4px rgba(65, 171, 252, 0.12),
+    0 8px 32px rgba(65, 171, 252, 0.14);
+  --glow-shield: rgba(65, 171, 252, 0.24);
+
+  /* Halo de focus — l'alpha 0.14 du light est invisible sur marine night */
+  /* Sur fond sombre le bleu logo PUR est excellent : 7,07:1 sur --surface. */
+  --ring: var(--shield-blue);
+  --focus-halo: rgba(65, 171, 252, 0.30);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Pourquoi il n'y a PAS de bloc `@media (prefers-color-scheme: dark)` ici.
+
+   Il en existait un, dupliquant à la main ~50 jetons pour le cas
+   `data-theme="system"` + OS en dark. C'était une seconde source de vérité :
+   elle avait déjà dérivé (deux bleus d'accent différents selon qu'on ait
+   choisi « dark » explicitement ou « system »).
+
+   Elle est inutile : PreferencesProvider pose déjà la classe `.dark` dans
+   les trois chemins du cas system —
+     · PREFERENCES_INIT_SCRIPT (anti-FOUC, avant le premier paint)
+     · applyToDom()            (au mount / au changement de préférence)
+     · le listener matchMedia  (bascule OS pendant la session)
+   donc le sélecteur `html.dark` ci-dessus couvre déjà « system + OS dark ».
+
+   ⚠ Ne pas réintroduire ce bloc : il ne peut que rediverger. Si le thème
+   dark doit changer, il n'y a qu'UN endroit à toucher.
+   ─────────────────────────────────────────────────────────────────── */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-glass: var(--surface-glass);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-control: var(--border-control);
+  --color-border-focus: var(--border-focus);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+  --color-text-link: var(--text-link);
+  --color-text-brand: var(--text-brand);
+
+  /* Ajouts Pupitre — même indirection, le dark cascade tout seul. */
+  --color-indicator: var(--indicator);
+  --color-chart-grid: var(--chart-grid);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-muted: var(--on-dark-muted);
+  --color-on-dark-hairline: var(--on-dark-hairline);
+  /* Tooltip Radix — FIXE sombre dans les DEUX thèmes, comme .pii-token
+     (le `bg-foreground` d'origine flippait avec le thème). */
+  --color-tooltip: var(--tooltip-bg);
+  --color-tooltip-foreground: var(--tooltip-fg);
+
+  /* ── Pont shadcn/ui ───────────────────────────────────────────────────
+     Le vocabulaire shadcn est mappé sur la couche sémantique MASKAI. Chaque
+     entrée est une INDIRECTION vers un jeton existant, donc le dark cascade
+     tout seul (une valeur littérale ici serait figée au build).
+
+     ⚠ Collision résolue : dans ce dépôt `--accent` désignait le REMPLISSAGE
+     du CTA ; chez shadcn `--accent` est une surface de SURVOL (items de menu,
+     de select, jours de calendrier). Les composants générés écrivent
+     littéralement `bg-accent text-accent-foreground`, on ne peut donc pas
+     garder l'ancien sens sans patcher chaque fichier généré à vie. Le rôle
+     applicatif devient donc `primary` — mêmes valeurs, zéro delta visuel —
+     et `accent` reprend le sens shadcn.
+     ─────────────────────────────────────────────────────────────────── */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-text: var(--primary-text);
+  /* Blanc littéral, pas --text-inverse : en dark celui-ci vaut #0a0e1a, soit
+     3,87:1 sur le CTA #3d63ea — sous AA. Le commentaire du jeton --accent
+     dimensionnait d'ailleurs explicitement le bleu pour du texte BLANC. */
+  --color-primary-foreground: #ffffff;
+
+  --color-accent: var(--surface-hover);
+  --color-accent-foreground: var(--text-primary);
+  --color-secondary: var(--surface-secondary);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--surface-secondary);
+  --color-muted-foreground: var(--text-secondary);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface-elevated);
+  --color-popover-foreground: var(--foreground);
+  --color-destructive: var(--signal-danger);
+  --color-destructive-foreground: #ffffff;
+  --color-input: var(--border-control);
+  --color-ring: var(--ring);
+
+  --color-marine-900: var(--marine-900);
+  --color-marine-800: var(--marine-800);
+  --color-marine-700: var(--marine-700);
+  --color-marine-600: var(--marine-600);
+
+  --color-shield-blue: var(--shield-blue);
+  --color-shield-blue-soft: var(--shield-blue-soft);
+  --color-shield-blue-deep: var(--shield-blue-deep);
+
+  --color-jaune-ue: var(--jaune-ue);
+  --color-jaune-ue-soft: var(--jaune-ue-soft);
+
+  /* ⚠ Les DEUX lignes sont obligatoires. Un `-soft` non mappé ne génère
+     AUCUNE règle : `bg-premium-soft` sort en fantôme (bordure seule, pas de
+     fond) dans les deux thèmes, sans erreur nulle part — exactement
+     l'incident consigné sur les `--color-signal-*-soft` plus bas.
+     Et c'est `var(--premium)`, jamais l'hexadécimal : une valeur littérale
+     ici serait figée au build et la cascade dark s'arrêterait. */
+  --color-premium: var(--premium);
+  --color-premium-soft: var(--premium-soft);
+
+  --color-stripe-50: var(--stripe-50);
+  --color-stripe-100: var(--stripe-100);
+  --color-stripe-200: var(--stripe-200);
+  --color-stripe-300: var(--stripe-300);
+  --color-stripe-400: var(--stripe-400);
+  --color-stripe-500: var(--stripe-500);
+  --color-stripe-700: var(--stripe-700);
+  --color-stripe-900: var(--stripe-900);
+
+  --color-signal-success: var(--signal-success);
+  --color-signal-success-text: var(--signal-success-text);
+  --color-signal-warning: var(--signal-warning);
+  --color-signal-warning-text: var(--signal-warning-text);
+  --color-signal-danger: var(--signal-danger);
+  --color-signal-danger-text: var(--signal-danger-text);
+  /* Les variantes -soft n'étaient PAS mappées : `bg-signal-danger-soft` &
+     co. ne généraient donc aucune règle, et ~15 badges s'affichaient en
+     fantômes (bordure seule, sans fond) — dans les DEUX thèmes. */
+  --color-signal-success-soft: var(--signal-success-soft);
+  --color-signal-warning-soft: var(--signal-warning-soft);
+  --color-signal-danger-soft: var(--signal-danger-soft);
+
+  --color-shield-green: var(--shield-green);
+  --color-shield-green-soft: var(--shield-green-soft);
+  --color-shield-yellow: var(--shield-yellow);
+  --color-shield-red: var(--shield-red);
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Rayons — on ÉCRASE l'échelle stock Tailwind v4 (xs 2 / sm 4 / md 6 /
+     lg 8 / xl 12 / 2xl 16 / 3xl 24). Chaque `rounded-*` déjà écrit dans les
+     composants se retaille donc tout seul, sans toucher un seul .tsx.
+     ⚠ `rounded` NU reste un littéral 0.25rem côté Tailwind (pas piloté par
+     un jeton) — les ~26 occurrences sont balayées à la main en §2.
+     ─────────────────────────────────────────────────────────────────── */
+  --radius-xs: 4px;               /* pastilles, puces de légende data-viz */
+  --radius-sm: 8px;               /* chips, tags inline, badges carrés */
+  --radius-md: var(--r-control);  /* 12px — dominant (boutons, inputs) */
+  --radius-lg: var(--r-card);     /* 16px — cards, popovers */
+  --radius-xl: 20px;              /* drawers, grands panneaux */
+  --radius-2xl: 24px;             /* modales, surfaces hero */
+  --radius-3xl: 28px;
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Élévation — mappe `--elev-*` sur le namespace `--shadow-*` de Tailwind.
+     Double effet : (1) les utilitaires `shadow-card` / `shadow-popover` /
+     `shadow-modal` / `shadow-cta` / `shadow-toast` EXISTENT enfin (ils ne
+     généraient rien avant, les jetons vivant hors de @theme) ; (2) @theme
+     émet aussi ces variables sur :root, donc les 8 sites qui font déjà
+     `style={{ boxShadow: "var(--shadow-popover)" }}` continuent de résoudre.
+     L'indirection via `var(--elev-*)` est ce qui laisse le dark cascader
+     (une valeur littérale ici serait figée au build).
+     ─────────────────────────────────────────────────────────────────── */
+  --shadow-cta: var(--elev-cta);
+  --shadow-cta-hover: var(--elev-cta-hover);
+  --shadow-card: var(--elev-card);
+  --shadow-popover: var(--elev-popover);
+  --shadow-toast: var(--elev-toast);
+  --shadow-modal: var(--elev-modal);
+  --shadow-glass: var(--elev-glass);
+  --shadow-glow: var(--elev-glow);
+
+  /* ─────────────────────────────────────────────────────────────────────
+     Échelle typographique — n'existait PAS. L'app portait 16 tailles
+     arbitraires `text-[NNpx]` (432 occurrences), dont 6 en demi-pixel, et
+     quatre tailles concurrentes pour « le corps de texte » : le message de
+     l'utilisateur sortait en 14px pendant que la réponse de l'IA sortait en
+     14.5px, dans la MÊME colonne.
+
+     Chaque palier embarque son interligne (syntaxe Tailwind v4
+     `--text-*--line-height`), ce qui règle le vrai problème : `body` n'avait
+     aucun line-height, donc ~92% du texte tombait sur le défaut navigateur
+     (~1.2) — un label 11px dans une boîte de ligne de 13px.
+     ─────────────────────────────────────────────────────────────────── */
+  /* ⚠ Échelle REMONTÉE D'UN CRAN par rapport à l'originale (10/11/12/13/14/
+     18/22/28). Deux raisons :
+
+     1. 157 sites rendaient à 10-11px (`text-2xs` ×127, `text-3xs` ×30) —
+        c'est le signal « fiche technique » le plus fort du produit.
+     2. Les composants shadcn sont écrits contre l'échelle STOCK de Tailwind
+        (xs 12 / sm 14 / base 16). Avec l'ancienne échelle, un `h-9 px-4
+        text-sm` shadcn sortait à 13px : chaque contrôle arrivait un cran
+        trop petit.
+
+     Tout passe par ces jetons, donc c'est une édition de ~16 lignes qui
+     repeint 400+ sites sans toucher un seul .tsx. */
+  --text-3xs: 11px;              /* badges micro, puces de légende */
+  --text-3xs--line-height: 1.45;
+  --text-2xs: 12px;              /* eyebrows, <th>, méta */
+  --text-2xs--line-height: 1.5;
+  --text-xs: 13px;               /* labels, texte secondaire dense */
+  --text-xs--line-height: 1.5;
+  --text-sm: 14px;               /* corps d'interface (tables, listes) */
+  --text-sm--line-height: 1.5;
+  --text-base: 15px;             /* corps de lecture (chat, prose) */
+  --text-base--line-height: 1.6;
+  --text-lg: 20px;               /* titres de section / de vue */
+  --text-lg--line-height: 1.35;
+  --text-xl: 24px;               /* titres de page */
+  --text-xl--line-height: 1.25;
+  --text-2xl: 32px;              /* chiffres KPI, titres de vue */
+  --text-2xl--line-height: 1.15;
+  /* L'échelle s'arrêtait à 32px : la plus grosse chose du chat était un
+     « BONJOUR » de 24px en capitales. Ces deux paliers servent les moments
+     d'accueil et le chiffre unique d'un hero (cf. le motif de index2.html). */
+  --text-3xl: 40px;              /* accueil, titre d'écran vide */
+  --text-3xl--line-height: 1.1;
+  --text-4xl: 56px;              /* chiffre unique de hero */
+  --text-4xl--line-height: 1;
+
+  /* Interlettrage — 12 valeurs distinctes ramenées à 3 utiles.
+     Le motif « micro-label en capitales » existait ~40× avec QUATRE
+     interlettrages et TROIS tailles différentes. */
+  --tracking-tight: -0.015em;    /* gros chiffres et titres */
+  --tracking-label: 0.06em;      /* LE label capitales, un seul */
+
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), "SF Mono", "Cascadia Code",
+    Consolas, monospace;
+  --font-display: var(--font-display);
+}
+
+*,
+*::before,
+*::after {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Couleur d'offset des anneaux Tailwind (`ring-offset-1/2`, 63 sites).
+   Sa valeur initiale est `#fff` et personne ne la posait : en dark chaque
+   focus clavier dessinait une BANDE BLANCHE PLEINE entre l'élément et son
+   anneau. Une ligne ici corrige les 63 sites d'un coup. */
+:root {
+  --tw-ring-offset-color: var(--background);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+html {
+  /* Défaut light — overridé par html.dark / html[data-theme="dark"] */
+  color-scheme: light;
+  /* PLANCHER DE HAUTEUR, et il est load-bearing. Sans lui, `h-full` ne résout
+     rien du tout et TOUTE la mise en page pend de `100dvh` — une unité que
+     Chromium laisse parfois périmée après un redimensionnement, ou sur un
+     onglet qui était en arrière-plan au moment du redimensionnement. Quand
+     c'est le cas, la coquille se fige à une hauteur fausse (610 px observés
+     pour un viewport de 1050) et la barre d'action décroche du bas, avec une
+     grande bande blanche dessous. Une chaîne en pourcentage, elle, se
+     réévalue toujours. Aucun provider n'émettant d'élément DOM entre `body`
+     et la page, cette chaîne passe sans obstacle. */
+  height: 100%;
+}
+
+body {
+  /* Deuxième maillon de la chaîne de hauteur (cf. `html` ci-dessus). */
+  height: 100%;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", system-ui, sans-serif;
+  /* ⚠ Il n'y avait AUCUN line-height ici. Tout ce qui ne portait pas de
+     `leading-*` héritait donc du défaut navigateur (~1.2 pour Inter) : un
+     label 11px vivait dans une boîte de ligne de 13px. C'était la première
+     cause de la sensation « à l'étroit ». Les paliers `--text-*` fixent
+     ensuite leur propre interligne ; ceci n'est que le filet de sécurité. */
+  line-height: 1.5;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Chiffres tabulaires — remplace 51 `style={{ fontFeatureSettings }}` inline
+   dupliqués dans 25 fichiers. `calt 0` coupe les ligatures contextuelles qui
+   décalent l'alignement des colonnes de chiffres. */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "calt" 0;
+}
+
+/* Titres majeurs charte — Archivo Bold MAJUSCULES (cf charte graphique §typo).
+   Réservé aux hero / titres de page (h1) / titres de section & modal (h2).
+   JAMAIS sur les petits labels, en-têtes de table, ou phrases longues —
+   c'est le seul endroit où la décision « majuscules » est prise. */
+.heading-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variation-settings: "wght" 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em; /* l'Archivo Bold MAJ a besoin d'air pour respirer */
+  line-height: 1.2; /* 1.2 pour ne pas rogner les accents capitales (È/É/Ç) */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Japonais — pile de polices CJK.
+
+   Inter, Archivo et JetBrains Mono ne couvrent aucun idéogramme : sans cette
+   règle, chaque caractère japonais déclenche un repli navigateur police par
+   police, ce qui donne des lignes panachées et une hauteur d'x incohérente.
+   On préfère les polices système (déjà installées sur macOS / Windows / iOS /
+   Android) plutôt qu'un webfont : Noto Sans JP pèse ~4 Mo en variable, pour
+   une locale sur quatre.
+
+   Le sélecteur s'appuie sur `<html lang>`, posé par PREFERENCES_INIT_SCRIPT
+   avant le premier paint puis maintenu par applyToDom().
+   ───────────────────────────────────────────────────────────────────────── */
+:lang(ja) {
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI",
+    "Yu Gothic", Meiryo, "Noto Sans JP", var(--font-inter), system-ui, sans-serif;
+  --font-display: "Hiragino Sans", "Yu Gothic UI", Meiryo, "Noto Sans JP",
+    var(--font-archivo), sans-serif;
+  --font-mono: "Noto Sans Mono CJK JP", var(--font-jetbrains), "SF Mono", monospace;
+}
+
+:lang(ja) body,
+:lang(ja) .heading-display {
+  font-family: var(--font-sans);
+}
+
+/* L'Archivo majuscule est une décision typographique latine : les kana et les
+   kanji n'ont pas de casse, `uppercase` n'y fait rien, et l'interlettrage
+   pensé pour des capitales latines disloque une ligne japonaise. */
+:lang(ja) .heading-display {
+  font-family: var(--font-display);
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+/* Selection neutre par défaut — le jaune UE reste chirurgical (brief §3) */
+::selection {
+  background: var(--stripe-200);
+  color: var(--stripe-900);
+}
+/* Selection dark dédiée — alpha plus opaque pour visibilité (l'alpha 0.08
+   du stripe-200 dark est invisible sur fond marine night) */
+html.dark ::selection,
+html[data-theme="dark"] ::selection {
+  background: rgba(94, 128, 255, 0.35);
+  color: #ffffff;
+}
+
+/* `.selection-brand` à appliquer uniquement aux blocs PII et AI Act
+   (tokens anonymisés, badges souveraineté, citations légales) */
+.selection-brand ::selection,
+.selection-brand::selection {
+  background: var(--jaune-ue-soft);
+  color: var(--stripe-900);
+}
+html.dark .selection-brand ::selection,
+html.dark .selection-brand::selection,
+html[data-theme="dark"] .selection-brand ::selection,
+html[data-theme="dark"] .selection-brand::selection {
+  background: rgba(255, 204, 0, 0.35);
+  color: #1a1f36;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   PII token — signature visuelle MASKAI (brief §3)
+   JetBrains Mono · fond jaune UE soft · hover reveal de l'original
+   ─────────────────────────────────────────────────────────────────── */
+.pii-token {
+  font-family: var(--font-jetbrains), "SF Mono", monospace;
+  font-size: 0.9em;
+  background: var(--jaune-ue-soft);
+  padding: 1px 6px;
+  /* Inline dans un paragraphe : reste petit exprès. Un rayon de contrôle
+     ici gonflerait la hauteur perçue du jeton et casserait l'interligne. */
+  border-radius: 4px;
+  color: var(--stripe-900);
+  cursor: help;
+  position: relative;
+  font-feature-settings: "calt" 0;
+  white-space: nowrap;
+}
+/* Token PII en dark — texte jaune UE sur tint plus opaque
+   (le stripe-900 flip en clair sur jaune translucide < 3:1) */
+html.dark .pii-token,
+html[data-theme="dark"] .pii-token {
+  background: rgba(255, 204, 0, 0.22);
+  color: var(--jaune-ue);
+}
+.pii-token:hover::after,
+.pii-token:focus::after {
+  content: attr(data-original);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Animations — héritées + nouvelles pour login
+   Respect prefers-reduced-motion appliqué globalement plus bas
+   ─────────────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes contentSwap {
+  0% { opacity: 1; filter: blur(0); }
+  40% { opacity: 0; filter: blur(4px); }
+  60% { opacity: 0; filter: blur(4px); }
+  100% { opacity: 1; filter: blur(0); }
+}
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@keyframes typingDot {
+  0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
+@keyframes loadingPulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+@keyframes loginEntry {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shieldDraw {
+  from { stroke-dashoffset: 240; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes cursorBlink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
+}
+@keyframes livePulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal-success) 50%, transparent);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal-success) 0%, transparent);
+  }
+}
+@keyframes thinkingBounce {
+  0%, 70%, 100% { transform: translateY(0); opacity: 0.3; }
+  35% { transform: translateY(-4px); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--duration-base) var(--ease-out) both;
+}
+.animate-message-in {
+  animation: messageIn var(--duration-slow) var(--ease-emphasized) both;
+}
+.animate-content-swap {
+  animation: contentSwap var(--duration-slow) var(--ease-in-out) forwards;
+}
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+.animate-typing-dot {
+  animation: typingDot 1.4s ease-in-out infinite;
+}
+.animate-loading-pulse {
+  animation: loadingPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.animate-login-entry {
+  animation: loginEntry var(--duration-slow) var(--ease-emphasized) both;
+}
+.animate-shield-draw path {
+  stroke-dasharray: 240;
+  stroke-dashoffset: 240;
+  animation: shieldDraw 0.9s var(--ease-emphasized) 0.1s forwards;
+}
+
+/* Button press feedback — scale(0.97) au :active (Emil Kowalski) */
+.btn-press {
+  transition: transform var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+.btn-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-press:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Pupitre — utilitaires et keyframes qui accompagnent lib/motion.ts.
+   Hors @layer comme le reste du fichier ; durées et courbes ne sont QUE
+   des jetons (aucun littéral ms ni cubic-bezier ci-dessous).
+   ─────────────────────────────────────────────────────────────────── */
+
+/* Eyebrow — LE micro-label en capitales (titre de section, méta de carte).
+   Inter 11px médium + --tracking-label. Jamais d'Archivo ici : la police
+   display reste réservée aux titres majeurs (.heading-display). */
+.t-eyebrow {
+  font-family: var(--font-inter);
+  font-size: var(--text-3xs);
+  line-height: var(--text-3xs--line-height);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--text-tertiary);
+}
+/* Kana/kanji : ni casse ni interlettrage latin (cf. .heading-display). */
+:lang(ja) .t-eyebrow {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* Chrome — barre sticky translucide (en-tête de vue, composer). Le filet bas
+   n'apparaît que lorsque la barre est « collée » : `data-stuck` est posé par
+   un IntersectionObserver côté composant. */
+.chrome {
+  background: var(--surface-glass);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.chrome[data-stuck="true"] {
+  border-bottom-color: var(--border);
+}
+/* Sans backdrop-filter, l'alpha laisserait le contenu lisible À TRAVERS la
+   barre : on repasse au palier opaque en relief. */
+@supports not (backdrop-filter: blur(1px)) {
+  .chrome {
+    background: var(--surface-elevated);
+  }
+}
+
+/* Squelette — reflet diagonal qui balaye la forme (remplace l'oscillation
+   d'opacité stock). `--skeleton-i` (posé par skeleton.tsx) décale chaque
+   ligne de 60ms pour que la liste ne clignote pas d'un bloc. */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(100deg, var(--skeleton-base) 40%, var(--skeleton-sheen) 50%, var(--skeleton-base) 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s var(--ease-in-out) infinite;
+  animation-delay: calc(var(--skeleton-i, 0) * 60ms);
+}
+
+/* Loader bouclier (ShieldLoader) — un segment du tracé parcourt le contour
+   du logo en boucle. Remplace le cercle qui tourne partout dans l'app. */
+@keyframes shieldLoop {
+  from { stroke-dashoffset: 240; }
+  to { stroke-dashoffset: 0; }
+}
+.shield-loader path {
+  stroke-dasharray: 60 180;
+  animation: shieldLoop 1.4s var(--ease-in-out) infinite;
+}
+
+/* Progression indéterminée — un segment balaye la piste (filet 2px de
+   ProgressHairline, ou barre de Progress sans valeur). Le <span> enfant est
+   le segment ; une seule cadence pour la famille : --duration-sweep. */
+@keyframes hairlineSweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+.progress-hairline > span {
+  animation: hairlineSweep var(--duration-sweep) var(--ease-in-out) infinite;
+}
+
+/* Halo qui s'épanouit (composant Glow : hero, écran vide). */
+@keyframes glowBloom {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-glow-bloom {
+  animation: glowBloom 600ms var(--ease-out) both;
+}
+
+/* Rythme vertical d'un message de chat — lit le jeton density-aware. */
+.message-rhythm {
+  padding-block: var(--message-padding-y);
+}
+
+/* Cible tactile ≥ 44px (WCAG 2.5.8) sans changer la géométrie visible : le
+   pseudo-élément étend la zone cliquable des boutons-icônes de 32/36px. */
+.tap-target {
+  position: relative;
+}
+.tap-target::after {
+  content: "";
+  position: absolute;
+  inset: min(0px, calc((100% - 44px) / 2));
+}
+
+/* Révélation de thème — View Transitions : le nouveau thème s'ouvre en cercle
+   depuis le point cliqué (`--vt-x` / `--vt-y` posés sur <html> par le toggle).
+   Sans l'API, le toggle pose `html.theme-transitioning` et tout fond en
+   couleur. Les deux chemins sont neutralisés en reduced-motion plus bas. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 0;
+}
+::view-transition-new(root) {
+  z-index: 1;
+  animation: theme-reveal var(--duration-hero) var(--ease-out);
+}
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--vt-x, 50%) var(--vt-y, 50%)); }
+  to { clip-path: circle(150vmax at var(--vt-x, 50%) var(--vt-y, 50%)); }
+}
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color var(--duration-slow) var(--ease-out),
+    border-color var(--duration-slow) var(--ease-out),
+    color var(--duration-slow) var(--ease-out),
+    fill var(--duration-slow) var(--ease-out),
+    stroke var(--duration-slow) var(--ease-out) !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Sonner toasts — overrides Mercury × Linear (brief §7.5)
+   Position bas droite, auto-dismiss 4s, light theme.
+   Variables sonner overridées via [data-sonner-toaster]. La boîte du toast
+   (rayon, ombre, bouton fermer) est stylée par `classNames` dans
+   components/ui/sonner.tsx — plus aucun `!important` ici.
+   ─────────────────────────────────────────────────────────────────── */
+/* ⚠ Les jetons `--stripe-*` ne sont PAS redéfinis en dark (seule la couche
+   sémantique l'est) : pointer dessus donnait un toast texte sombre sur
+   surface sombre. Tout est repointé sur --border / --text-* ci-dessous. */
+[data-sonner-toaster] {
+  --normal-bg: var(--surface);
+  --normal-border: var(--border);
+  --normal-text: var(--text-primary);
+
+  --success-bg: var(--surface);
+  --success-border: color-mix(in srgb, var(--signal-success) 30%, transparent);
+  --success-text: var(--signal-success-text);
+
+  --error-bg: var(--surface);
+  --error-border: color-mix(in srgb, var(--signal-danger) 30%, transparent);
+  --error-text: var(--signal-danger-text);
+
+  --warning-bg: var(--surface);
+  --warning-border: color-mix(in srgb, var(--jaune-ue) 60%, transparent);
+  /* --marine-900 vaut #3d63ea en dark → 3.47:1 sur --surface, échec AA
+     pour du texte. La couche sémantique est le bon niveau ici. */
+  --warning-text: var(--text-primary);
+
+  --info-bg: var(--surface);
+  --info-border: var(--border-strong);
+  --info-text: var(--text-primary);
+
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+[data-sonner-toast] [data-title] {
+  font-weight: 500;
+}
+[data-sonner-toast] [data-description] {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  margin-top: 2px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Les quatre feuilles de style de `<dialog>` natifs vivaient ici :
+   `dialog.aiact-modal`, `dialog.settings-modal`, `dialog.logs-drawer` et
+   `dialog.ui-modal` / `dialog.ui-drawer` — ~285 lignes qui redupliquaient la
+   même motion, le même `::backdrop` et le même `@starting-style`.
+
+   Elles sont mortes depuis le passage aux surfaces Radix (Dialog / AlertDialog
+   / Sheet), qui portent leur animation en `data-[state=open|closed]` via
+   tw-animate-css, et leur voile en composant (`--backdrop-overlay` + flou 2px,
+   cf. `components/ui/{dialog,alert-dialog,sheet}.tsx`).
+
+   Ce qu'elles consommaient est CONSERVÉ, car les nouvelles surfaces s'en
+   servent encore : `--backdrop-overlay`, `--ease-drawer`, `--duration-*`,
+   `--shadow-modal`. `.animate-slide-in-right` ci-dessous reste aussi — c'est
+   l'ArtifactPanel, un `<aside>` non-modal qui n'est PAS devenu un Sheet
+   (un Sheet est modal et bloquerait le composer pendant la lecture).
+   ─────────────────────────────────────────────────────────────────── */
+
+/* Panneau latéral non-modal (ArtifactPanel). La classe
+   `animate-slide-in-right` était APPLIQUÉE sans qu'aucune keyframe du même
+   nom existe : le panneau apparaissait d'un coup, en avalant 45% du viewport
+   sans transition. C'était le moment de motion le plus brutal du produit. */
+@keyframes slideInRight {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-slide-in-right {
+  animation: slideInRight var(--duration-slow) var(--ease-out) both;
+}
+
+/* Logo pulse — subtle scale 4s, splash empty state (Mercury restraint) */
+.animate-logo-pulse {
+  animation: logoPulse 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Live dot — pulse vert pour streaming actif (signal-success) */
+.live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal-success);
+  animation: livePulse 1.8s ease-in-out infinite;
+  vertical-align: baseline;
+}
+
+/* Thinking dots — avant le 1er token (« Réflexion »), 3 points qui rebondissent
+   en cascade : signal « en cours » clair, jamais figé. */
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.thinking-dots > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--indicator);
+  animation: thinkingBounce 1.2s ease-in-out infinite;
+}
+.thinking-dots > span:nth-child(2) { animation-delay: 0.16s; }
+.thinking-dots > span:nth-child(3) { animation-delay: 0.32s; }
+
+/* Streaming cursor — fin de stream IA, blink 1s cycle, pas de scale */
+.streaming-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--indicator);
+  animation: cursorBlink 1s steps(1) infinite;
+  border-radius: 1px;
+}
+
+/* PII token réintégré dans le rendu IA — cliquable hover reveal.
+   ⚠ C'EST CETTE CLASSE que le rendu utilise réellement (ChatMessage.tsx,
+   AnonymizedSection.tsx). L'override dark existait sur `.pii-token`, qui
+   n'est appliquée dans AUCUN .tsx — résultat : en dark les placeholders
+   `<PERSON_1>` tombaient à 1.11:1, donc invisibles jusqu'au survol. La
+   signature produit entière disparaissait. */
+.pii-token-reveal {
+  font-family: var(--font-jetbrains), "SF Mono", monospace;
+  font-size: 0.92em;
+  background: var(--jaune-ue-soft);
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--stripe-900);
+  cursor: help;
+  transition: background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+  outline-offset: 1px;
+  font-feature-settings: "calt" 0;
+}
+.pii-token-reveal:hover {
+  background: var(--jaune-ue);
+}
+/* Dark — jaune UE sur tint plus opaque : 6.85:1 (vs 1.11:1 avant). */
+html.dark .pii-token-reveal,
+html[data-theme="dark"] .pii-token-reveal {
+  background: rgba(255, 204, 0, 0.22);
+  color: var(--jaune-ue);
+}
+/* Au survol le fond devient jaune PLEIN : le texte doit repasser sombre,
+   sinon jaune-sur-jaune. 10.74:1. */
+html.dark .pii-token-reveal:hover,
+html[data-theme="dark"] .pii-token-reveal:hover {
+  background: var(--jaune-ue);
+  color: var(--stripe-900);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Revue de l'Anonymiseur — marques de l'aperçu, par FAMILLE de type
+   ─────────────────────────────────────────────────────────────────────
+   ⚠ NE PAS forker `.pii-token-reveal`. Le jaune UE est réservé aux
+   placeholders réintégrés dans une réponse du modèle, son override dark
+   est calibré au contraste, et deux jaunes voisins qui ne veulent pas dire
+   la même chose valent moins que pas de couleur du tout. Les marques de
+   l'aperçu forment donc leur propre échelle.
+
+   ⚠ PILOTÉ PAR ATTRIBUT, jamais par classe dynamique. Tailwind v4 scanne le
+   TEXTE SOURCE : une classe `bg-pii-${famille}` composée à l'exécution ne
+   génère aucun CSS, et l'aperçu sortirait entièrement incolore, sans la
+   moindre erreur pour le dire.
+
+   Le texte reste toujours en `--text-primary` : la teinte ne porte que le
+   fond et le liseré, donc aucune paire de couleurs ne descend sous le
+   contraste du corps de texte, dans les deux thèmes. */
+:root {
+  --pii-person: #d8e6fb;
+  --pii-contact: #d5efe4;
+  --pii-place: #fde4d3;
+  --pii-org: #e2ddf7;
+  --pii-time: #d9ecf6;
+  --pii-id: #fbe1ec;
+  --pii-money: #e6e9d6;
+  --pii-sensitive: #f7dcdc;
+  --pii-other: var(--surface-secondary);
+}
+html.dark,
+html[data-theme="dark"] {
+  /* Teintes désaturées et assombries : sur `--surface #141926`, les pastels
+     clairs ci-dessus feraient du texte sombre sur fond clair au milieu d'une
+     page sombre. */
+  --pii-person: #24384f;
+  --pii-contact: #1e3d36;
+  --pii-place: #46301f;
+  --pii-org: #322c4d;
+  --pii-time: #1f3646;
+  --pii-id: #43243a;
+  --pii-money: #35381f;
+  --pii-sensitive: #452527;
+  --pii-other: var(--surface-secondary);
+}
+
+/* La marque en ligne dans l'aperçu. C'est du texte de remplacement
+   (`<PERSON_1>` ou la boîte noire), donc en chasse fixe comme le reste des
+   jetons du produit. */
+.pii-mark {
+  font-family: var(--font-jetbrains), "SF Mono", monospace;
+  font-size: 0.92em;
+  background: var(--pii-other);
+  color: var(--text-primary);
+  padding: 0 3px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  outline-offset: 1px;
+  font-feature-settings: "calt" 0;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+.pii-mark:hover,
+.pii-mark[data-active="true"] {
+  border-color: var(--border-strong);
+}
+.pii-mark[aria-busy="true"] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* La pastille du panneau : même échelle, pour que l'œil relie une ligne de
+   la liste à ses marques dans le texte sans lire les libellés. */
+.pii-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--pii-other);
+  border: 1px solid var(--border-strong);
+  flex: none;
+}
+
+.pii-mark[data-pii-family="person"],
+.pii-dot[data-pii-family="person"] { background: var(--pii-person); }
+.pii-mark[data-pii-family="contact"],
+.pii-dot[data-pii-family="contact"] { background: var(--pii-contact); }
+.pii-mark[data-pii-family="place"],
+.pii-dot[data-pii-family="place"] { background: var(--pii-place); }
+.pii-mark[data-pii-family="org"],
+.pii-dot[data-pii-family="org"] { background: var(--pii-org); }
+.pii-mark[data-pii-family="time"],
+.pii-dot[data-pii-family="time"] { background: var(--pii-time); }
+.pii-mark[data-pii-family="id"],
+.pii-dot[data-pii-family="id"] { background: var(--pii-id); }
+.pii-mark[data-pii-family="money"],
+.pii-dot[data-pii-family="money"] { background: var(--pii-money); }
+.pii-mark[data-pii-family="sensitive"],
+.pii-dot[data-pii-family="sensitive"] { background: var(--pii-sensitive); }
+
+/* Clignotement quand on saute depuis le panneau vers une occurrence : sans
+   lui, « Voir dans l'aperçu » fait défiler vers un mur de texte identique. */
+@keyframes piiFlash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  25%,
+  75% {
+    box-shadow: 0 0 0 3px var(--focus-halo);
+  }
+}
+.pii-mark[data-flash="true"] {
+  animation: piiFlash 1.2s var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pii-mark[data-flash="true"] {
+    animation: none;
+    border-color: var(--ring);
+  }
+}
+
+/* Le texte de l'aperçu : respecte les retours à la ligne du document, et ne
+   déborde jamais horizontalement (un CSV d'une seule ligne le ferait). */
+.pii-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  line-height: 1.75;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Revue — la PAGE rendue (aperçu visuel d'un PDF)
+   ─────────────────────────────────────────────────────────────────────
+   L'image servie par le serveur est DÉJÀ caviardée : elle porte la boîte
+   noire ou le placeholder. Le calque n'ajoute donc AUCUNE encre — un
+   remplissage opaque cacherait précisément ce que l'utilisateur vient
+   vérifier. Il pose un liseré, un voile au survol, et un clignotement.
+
+   ⚠ Teintes propres, jamais `--pii-*` : celles-ci sont réassignées en thème
+   sombre (#24384f…), et la page rendue est du papier BLANC dans les deux
+   thèmes — un pastel « dark » y deviendrait un pavé illisible. Celles-ci ne
+   sont donc définies qu'une fois. */
+:root {
+  --pdf-pii-person: #d8e6fb;
+  --pdf-pii-contact: #d5efe4;
+  --pdf-pii-place: #fde4d3;
+  --pdf-pii-org: #e2ddf7;
+  --pdf-pii-time: #d9ecf6;
+  --pdf-pii-id: #fbe1ec;
+  --pdf-pii-money: #e6e9d6;
+  --pdf-pii-sensitive: #f7dcdc;
+  --pdf-pii-other: #e3e8ef;
+}
+
+.pdf-page {
+  position: relative;
+  width: 100%;
+  background: #fff;
+  container-type: size;
+  /* Le calque est sélectionnable, l'image ne l'est pas : sans ceci un
+     glissement démarrerait une sélection du cadre entier. */
+  user-select: none;
+}
+.pdf-page > img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Un glissement sur l'image ne doit NI la déplacer NI interrompre la
+     sélection en cours sur le calque. */
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+.pdf-page[data-busy="true"] > img {
+  opacity: 0.55;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.pdf-textlayer {
+  position: absolute;
+  inset: 0;
+  user-select: text;
+  cursor: text;
+}
+.pdf-textlayer > * {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  /* Les glyphes du calque ne coïncident pas avec l'encre de l'image : ils
+     doivent être sélectionnables et INVISIBLES. */
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  white-space: pre;
+  line-height: 1;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+/* Le surlignage est peint par NOUS (`data-selected`), pas par `::selection`.
+   Deux raisons : un surlignage de glyphes transparents serait décalé de
+   quelques pixels sur chaque mot ; et `.selection-brand` impose une `color`
+   en sélection, ce qui rendrait le texte du calque VISIBLE, en double de
+   l'image. */
+.pdf-textlayer ::selection {
+  background: transparent;
+  color: transparent;
+}
+.pdf-textlayer [data-selected="true"] {
+  background: rgba(255, 204, 0, 0.38);
+  border-radius: 2px;
+}
+
+.pdf-mark {
+  border-radius: 3px;
+  cursor: pointer;
+  outline-offset: 1px;
+  /* FOND TOUJOURS VISIBLE. C'est ici, et NULLE PART dans le fichier produit,
+     que vit la couleur : elle sert à repérer d'un coup d'œil ce qui a été
+     masqué, sans survoler la page centimètre par centimètre. L'export, lui,
+     garde son aplat neutre (cf. `_redact_page`, backend).
+     Translucide à dessein : le jeton `<TYPE_n>` est peint DANS l'image, il doit
+     rester lisible dessous — et sur une boîte noire (mode anonymisation) la
+     teinte ne fait que colorer le bord perçu. */
+  background: color-mix(in srgb, var(--pdf-tint) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pdf-tint) 85%, #000 15%);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.pdf-mark[data-pii-family="person"] { --pdf-tint: var(--pdf-pii-person); }
+.pdf-mark[data-pii-family="contact"] { --pdf-tint: var(--pdf-pii-contact); }
+.pdf-mark[data-pii-family="place"] { --pdf-tint: var(--pdf-pii-place); }
+.pdf-mark[data-pii-family="org"] { --pdf-tint: var(--pdf-pii-org); }
+.pdf-mark[data-pii-family="time"] { --pdf-tint: var(--pdf-pii-time); }
+.pdf-mark[data-pii-family="id"] { --pdf-tint: var(--pdf-pii-id); }
+.pdf-mark[data-pii-family="money"] { --pdf-tint: var(--pdf-pii-money); }
+.pdf-mark[data-pii-family="sensitive"] { --pdf-tint: var(--pdf-pii-sensitive); }
+.pdf-mark[data-pii-family="other"] { --pdf-tint: var(--pdf-pii-other); }
+.pdf-mark:hover,
+.pdf-mark[data-active="true"] {
+  background: color-mix(in srgb, var(--pdf-tint) 85%, transparent);
+}
+.pdf-mark[aria-busy="true"] {
+  opacity: 0.55;
+  cursor: progress;
+}
+.pdf-mark[data-flash="true"] {
+  animation: piiFlash 1.2s var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdf-mark[data-flash="true"] {
+    animation: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Glass — legacy chat, conservé pour ne pas casser
+   ─────────────────────────────────────────────────────────────────── */
+.glass {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   prose-llm — rendu markdown des réponses IA (chat existant)
+   ─────────────────────────────────────────────────────────────────── */
+.prose-llm {
+  color: var(--text-primary);
+  /* 14px et plus 14.5px : le message de l'utilisateur (text-base) et la
+     réponse de l'IA vivent dans la MÊME colonne — un écart d'un demi-pixel
+     s'y voyait comme un défaut de rendu. */
+  font-size: var(--text-base);
+  line-height: 1.65;
+}
+.prose-llm p { margin-bottom: 0.75em; }
+.prose-llm p:last-child { margin-bottom: 0; }
+
+.prose-llm h1,
+.prose-llm h2,
+.prose-llm h3,
+.prose-llm h4 {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+}
+.prose-llm h1 { font-size: 1.35em; }
+.prose-llm h2 { font-size: 1.2em; }
+.prose-llm h3 { font-size: 1.1em; }
+
+.prose-llm ul,
+.prose-llm ol { padding-left: 1.5em; margin-bottom: 0.75em; }
+.prose-llm ul { list-style-type: disc; }
+.prose-llm ol { list-style-type: decimal; }
+.prose-llm li { margin-bottom: 0.25em; }
+
+.prose-llm code {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  /* Inline, dans le flux du texte — reste serré (cf. .pii-token) */
+  border-radius: 6px;
+  padding: 0.15em 0.4em;
+  font-size: 0.88em;
+  font-family: var(--font-jetbrains), "SF Mono", monospace;
+  /* var(--text-link) adaptatif : marine-700 light (~10:1 sur surface-sec)
+     + shield-blue dark (~10:1) — fix Vercel WCAG audit (marine-700 dark
+     #5879f0 sur #1a2444 = 3.18:1 FAIL) */
+  color: var(--text-link);
+}
+
+.prose-llm pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 1em 1.25em;
+  overflow-x: auto;
+  margin-bottom: 0.75em;
+}
+.prose-llm pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+  font-size: 0.85em;
+}
+
+/* Bloc de code : wrapper relatif + bouton « Copier » ancré en haut à droite,
+   révélé au survol/focus (cf. CodeBlock dans ChatMessage). */
+.prose-llm .code-block {
+  position: relative;
+}
+.prose-llm .code-block-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.prose-llm .code-block:hover .code-block-copy,
+.prose-llm .code-block:focus-within .code-block-copy {
+  opacity: 1;
+}
+
+/* Coloration syntaxique (rehype-highlight / highlight.js) — tokens mappés sur
+   la palette de marque, donc adaptatifs light/dark sans thème hljs importé. */
+.prose-llm .hljs-comment,
+.prose-llm .hljs-quote {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+.prose-llm .hljs-keyword,
+.prose-llm .hljs-selector-tag,
+.prose-llm .hljs-literal,
+.prose-llm .hljs-section,
+.prose-llm .hljs-doctag,
+.prose-llm .hljs-type,
+.prose-llm .hljs-name,
+.prose-llm .hljs-built_in {
+  color: var(--text-link);
+  font-weight: 600;
+}
+.prose-llm .hljs-string,
+.prose-llm .hljs-attr,
+.prose-llm .hljs-regexp,
+.prose-llm .hljs-addition,
+.prose-llm .hljs-meta-string {
+  color: var(--signal-success-text);
+}
+.prose-llm .hljs-number,
+.prose-llm .hljs-symbol,
+.prose-llm .hljs-bullet,
+.prose-llm .hljs-link {
+  color: var(--marine-600);
+}
+.prose-llm .hljs-title,
+.prose-llm .hljs-title.function_,
+.prose-llm .hljs-title.class_ {
+  color: var(--marine-600);
+  font-weight: 600;
+}
+.prose-llm .hljs-attribute,
+.prose-llm .hljs-variable,
+.prose-llm .hljs-template-variable,
+.prose-llm .hljs-params {
+  color: var(--text-primary);
+}
+.prose-llm .hljs-meta {
+  color: var(--text-tertiary);
+}
+.prose-llm .hljs-deletion {
+  color: var(--signal-danger);
+}
+.prose-llm .hljs-emphasis {
+  font-style: italic;
+}
+.prose-llm .hljs-strong {
+  font-weight: 700;
+}
+
+.prose-llm blockquote {
+  border-left: 3px solid var(--marine-900);
+  padding-left: 1em;
+  margin: 0.75em 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.prose-llm a {
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.prose-llm a:hover {
+  color: var(--marine-600);
+}
+
+.prose-llm table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75em;
+  font-size: 0.92em;
+}
+.prose-llm th,
+.prose-llm td {
+  border: 1px solid var(--border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.prose-llm th {
+  background: var(--surface-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.85em;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.prose-llm hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.25em 0;
+}
+.prose-llm strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Accessibilité — WCAG AA strict (brief §10, non négociable)
+   ─────────────────────────────────────────────────────────────────── */
+/* L'anneau PLEIN reste — un halo diffus seul ne passe pas SC 1.4.11 :
+   `--focus-halo` fondu sur blanc donne ~#dce0e5, soit 1.33:1 contre la
+   surface (il en faut 3:1). Le halo vient donc EN PLUS, à l'extérieur de
+   l'anneau, pour l'aspect « soft » — jamais à sa place.
+
+   ⚠ CE BLOC N'EST PAS DANS UNE `@layer`. Rien après `@import "tailwindcss"`
+   ne l'est, et une déclaration hors couche l'emporte sur TOUTES les couches
+   Tailwind. Il gagne donc contre le `focus-visible:ring-*` que les composants
+   shadcn écrivent — ceux-ci sont un no-op tant que cette règle vit ici. C'est
+   assumé : un traitement de focus unique pour toute l'app. Le seul opt-out
+   nécessaire (`.chat-input-textarea`) passe par `!important`, qui bat encore
+   ceci puisqu'il est lui aussi hors couche.
+
+   ⚠ Le `border-radius: var(--r-control)` qui vivait ici a été SUPPRIMÉ : un
+   outline suit déjà le rayon propre de l'élément ; cette ligne RÉÉCRIVAIT
+   donc le rayon pendant le focus. Invisible jusqu'ici, elle aurait carré les
+   `rounded-full` de shadcn (Switch, Avatar, Badge pill) à la prise de focus. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  /* Halo au-delà de l'anneau (offset 2 + trait 2 = 4px occupés, spread 6px).
+     Les 8 sites en `style={{ boxShadow }}` inline gardent leur ombre — le
+     style inline gagne — et restent accessibles via l'outline ci-dessus. */
+  box-shadow: var(--focus-ring);
+}
+
+/* CHAMPS DE SAISIE : focus NEUTRE, jamais bleu (demande produit, 2026-09-02).
+   Un champ texte prend le focus au CLIC (les navigateurs y appliquent
+   `:focus-visible` même à la souris), donc l'anneau bleu ci-dessus s'allumait
+   sur chaque recherche, chaque formulaire, chaque composeur. Ici le trait
+   passe simplement au gris `--text-tertiary` (4,5:1 sur la surface — WCAG
+   1.4.11 exige 3:1) avec un halo d'encre à 6 %. Le bleu charte reste réservé
+   aux boutons, liens et cases (focus CLAVIER uniquement). Hors @layer et
+   APRÈS la règle générale : c'est ce qui la fait gagner. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="combobox"]:focus-visible,
+[data-slot="select-trigger"]:focus-visible,
+[contenteditable="true"]:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  border-color: var(--text-tertiary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+/* La barre d'input chat se passe du focus ring (le conteneur lui sert de
+   repère visuel) — on neutralise l'outline global juste pour ce textarea.
+   !important + :focus/:focus-visible pour battre la règle a11y globale
+   quelle que soit la couche de cascade. */
+.chat-input-textarea,
+.chat-input-textarea:focus,
+.chat-input-textarea:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-shield-draw path {
+    stroke-dashoffset: 0 !important;
+  }
+  .animate-logo-pulse,
+  .live-dot,
+  .thinking-dots > span,
+  .streaming-cursor {
+    animation: none !important;
+  }
+  /* Ajouts Pupitre — état de repos lisible plutôt qu'une boucle figée. */
+  .skeleton-shimmer {
+    animation: none;
+    background: var(--skeleton-base);
+  }
+  .shield-loader path {
+    animation: none;
+    opacity: 0.55;
+  }
+  .progress-hairline > span {
+    animation: none;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .animate-glow-bloom {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ─── AJOUT PIPLINER (hors copie) ────────────────────────────────────────────────────────────────
+   Les polices nommées par les jetons (`--font-inter`, `--font-archivo`, `--font-jetbrains`), depuis
+   les mêmes paquets @fontsource-variable que MaskAI-Frontend, qui les importe en JavaScript.
+   Sous-ensemble latin seulement : il couvre le français et l'anglais ; tout autre caractère retombe
+   sur une police système.
+   Déclarées ici plutôt qu'en important la CSS des paquets : le bundler CSS de Bun 1.3.11 réécrit leur
+   format('woff2-variations') en format(woff2-variations), qui n'est pas du CSS valide — le navigateur
+   ignorait alors toutes ces règles et la page retombait sur les polices système, sans aucune erreur
+   (constat de MaskAILawyer-AnalyzerAudioService/test-app/src/fonts.css). format("woff2") survit au
+   bundler et charge les mêmes fichiers variables. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../../node_modules/@fontsource-variable/archivo/files/archivo-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2")
+    format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

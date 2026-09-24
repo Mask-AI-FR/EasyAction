@@ -1,0 +1,44 @@
+/*
+ * EasyActions — couche de marque, chargée APRÈS la copie MASKAI (`globals.css`, qui reste inchangée).
+ *
+ * Décision du mainteneur (24 septembre 2026) : l'application prend les couleurs du logo EasyActions
+ * (pack v2). Seuls les jetons de MARQUE sont remplacés : CTA, liens, focus, texte de marque, ombre du
+ * CTA, sélection en thème sombre. Surfaces, textes neutres, bordures, signaux, rayons et densité
+ * restent ceux de MASKAI. Chaque paire texte/fond ci-dessous est vérifiée (WCAG AA) par
+ * tests/unit/theme.test.ts : changer une valeur sans passer ce test est un défaut.
+ *
+ * « En cours » reste BLEU (`--run-text`, jeton propre à cette couche, sur `--shield-blue-soft`) : en
+ * vert, une exécution en cours se confondrait avec « Success » et avec le vert de la marque.
+ */
+:root {
+  --primary: #047857;
+  --primary-hover: #065f32;
+  --primary-soft: rgba(4, 120, 87, 0.08);
+  --primary-text: #047857;
+  --text-link: #047857;
+  --text-brand: #052e1c;
+  --border-focus: #047857;
+  --ring: #16a34a;
+  --elev-cta: 0 1px 2px rgba(5, 46, 28, 0.08), 0 1px 3px rgba(5, 46, 28, 0.06);
+  --elev-cta-hover: 0 2px 4px rgba(5, 46, 28, 0.1), 0 6px 12px rgba(5, 46, 28, 0.1);
+  --run-text: #1a3aa8;
+}
+
+html.dark,
+html[data-theme="dark"] {
+  --primary: #15803d;
+  --primary-hover: #166534;
+  --primary-soft: rgba(74, 222, 128, 0.14);
+  --primary-text: #4ade80;
+  --text-link: #4ade80;
+  --text-brand: #d1fae5;
+  --border-focus: #4ade80;
+  --ring: #4ade80;
+  --run-text: #8fa8ff;
+}
+
+html.dark ::selection,
+html[data-theme="dark"] ::selection {
+  background: rgba(74, 222, 128, 0.3);
+  color: #ffffff;
+}

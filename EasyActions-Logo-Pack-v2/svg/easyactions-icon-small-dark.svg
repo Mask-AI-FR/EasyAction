@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="ea-gear" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6EE7A8"/>
+      <stop offset="0.5" stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#052E1C"/>
+  <path d="M 197.4 85.81 L 207.86 47.48 A 214 214 0 0 1 304.14 47.48 L 314.6 85.81 A 180 180 0 0 1 374.09 120.15 L 412.51 110.05 A 214 214 0 0 1 460.65 193.43 L 432.69 221.65 A 180 180 0 0 1 432.69 290.35 L 460.65 318.57 A 214 214 0 0 1 412.51 401.95 L 374.09 391.85 A 180 180 0 0 1 314.6 426.19 L 304.14 464.52 A 214 214 0 0 1 207.86 464.52 L 197.4 426.19 A 180 180 0 0 1 137.91 391.85 L 99.49 401.95 A 214 214 0 0 1 51.35 318.57 L 79.31 290.35 A 180 180 0 0 1 79.31 221.65 L 51.35 193.43 A 214 214 0 0 1 99.49 110.05 L 137.91 120.15 A 180 180 0 0 1 197.4 85.81 Z M 256 124 A 132 132 0 1 0 256 388 A 132 132 0 1 0 256 124 Z" fill="url(#ea-gear)" fill-rule="evenodd" stroke="url(#ea-gear)" stroke-width="16" stroke-linejoin="round"/>
+    <circle cx="256" cy="256" r="124" fill="#065F32"/>
+    <path d="M 228 190 L 294 256 L 228 322" fill="none" stroke="#FFFFFF" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
