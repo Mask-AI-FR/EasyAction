@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
 import { env } from "../server/config/env.ts";
+import { schemaStateOf } from "../server/db/database.ts";
 import { buildWebApp } from "./buildApp.ts";
 
 /**
@@ -77,6 +78,12 @@ async function waitUntilUp(origin: string): Promise<boolean> {
 /** Build + démarrage quand rien ne répond encore ; faux si le serveur n'a pas démarré. */
 async function ensureServer(origin: string): Promise<boolean> {
   if (await isEasyActionsUp(origin)) return true;
+  // Le serveur refuserait de démarrer (base absente ou pas à jour) : on le dit tout de suite, au lieu
+  // d'attendre 20 s une fenêtre qui ne viendra pas.
+  if (schemaStateOf(env.databasePath) !== "ready") {
+    say("The EasyActions database is missing or out of date. Run: bun run db:migrate");
+    return false;
+  }
   say("Building EasyActions…");
   const build = await buildWebApp("./dist/app");
   if (!build.success) {

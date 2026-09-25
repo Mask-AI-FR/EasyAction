@@ -115,3 +115,22 @@ export function errorPanel(error: ApiError | null, onRetry: () => void): Templat
     </section>
   `;
 }
+
+/**
+ * Pages d'administration : un refus du serveur (403) devient « réservé aux administrateurs », pas une
+ * erreur ; tout autre échec, le panneau d'erreur. Le serveur reste seul juge du rôle.
+ */
+export function adminOnlyPanel(error: ApiError | null, onRetry: () => void): TemplateResult {
+  if (error?.code !== "forbidden") return errorPanel(error, onRetry);
+  return html`
+    <section class="rounded-lg border border-border bg-surface shadow-card">
+      <app-empty-state
+        class="block"
+        size="page"
+        variant="empty"
+        heading="Administrators only"
+        description="Ask an administrator of EasyActions to give you the admin role."
+      ></app-empty-state>
+    </section>
+  `;
+}

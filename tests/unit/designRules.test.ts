@@ -48,6 +48,11 @@ describe("système de design MASKAI", () => {
   test("aucune classe construite dynamiquement : Tailwind ne génère que les classes écrites en entier", async () => {
     expect(await filesMatching(/\b(?:bg|text|border|ring|fill|stroke)-\$\{/)).toEqual([]);
   });
+
+  test("aucun style en attribut : la CSP (default-src 'self') le bloque — `styleMap` de Lit en écrit un au premier rendu", async () => {
+    // Constat du navigateur (M8) : les graphiques perdaient leur hauteur. Passer par le CSSOM (`el.style.x = …`).
+    expect(await filesMatching(/\bstyleMap\b|\sstyle=/)).toEqual([]);
+  });
 });
 
 describe("shadow DOM de TiniJS", () => {

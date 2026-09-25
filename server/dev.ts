@@ -1,8 +1,12 @@
 import { readdirSync } from "node:fs";
 import { env } from "./config/env.ts";
 import appPage from "../app/index.html";
-import { buildApp } from "./app.ts";
+import { buildApp, listenOptions } from "./app.ts";
 import { logger } from "./config/logger.ts";
+import { openDatabase } from "./db/database.ts";
+import { deriveDataKey } from "./security/dataCipher.ts";
+import { purgeExpiredData } from "./services/sessions.ts";
+import { assertSettingsReady } from "./services/settings.ts";
 
 /**
  * Point d'entrée de DÉVELOPPEMENT (`bun run dev` = `bun --hot server/dev.ts`).
@@ -12,7 +16,14 @@ import { logger } from "./config/logger.ts";
  * CSP ici — acceptable sur 127.0.0.1, jamais en production (voir `server/index.ts`).
  * Priorité des routes Bun : exacte > paramètre > joker (`/api/*`) > joker global (`/*`).
  */
-const app = buildApp(env);
+// Fichiers créés par ce processus (base SQLite, journaux `-wal`/`-shm`) : lisibles par son seul
+// propriétaire. SQLite n'a pas d'option de mode, et DATABASE_PATH peut viser n'importe quel dossier.
+process.umask(0o077);
+const db = openDatabase(env.databasePath);
+assertSettingsReady(db, deriveDataKey(env.dataEncryptionKey));
+purgeExpiredData(db, env.auditRetentionDays);
+
+const app = buildApp(env, db);
 const viaHono = (request: Request): Response | Promise<Response> =>
   app.fetch(request);
 
@@ -32,8 +43,7 @@ function serveIcon(request: Bun.BunRequest<"/icons/:file">): Response {
 }
 
 Bun.serve({
-  hostname: env.host,
-  port: env.port,
+  ...listenOptions(env),
   development: true,
   routes: {
     "/health": viaHono,

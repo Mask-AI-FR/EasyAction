@@ -5,7 +5,7 @@ import type { DispatchRejection, DispatchTarget } from "../../domain/dispatchCon
 import { dispatchWorkflow, listRecentRuns, listWorkflows } from "../../server/adapters/githubActions.ts";
 
 const github = new FakeGitHub();
-const settings = github.env().github;
+const settings = github.settings();
 const TOKEN = "ghu_not-a-real-token";
 const repo = { owner: "Mask-AI-FR", repo: "sandbox" };
 const target: DispatchTarget = { owner: "Mask-AI-FR", repo: "sandbox", workflowId: 11, ref: "main" };

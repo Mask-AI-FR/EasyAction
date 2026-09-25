@@ -3,20 +3,26 @@
 How the app is built today and why. Its product name is **EasyActions** (maintainer's decision,
 24 September 2026); **Pipliner** remains the codename in the code, the repository, the cookies, `/health`
 and the logs, so that renaming broke nothing and signed nobody out. Verified against the code on
-24 September 2026, at the end of milestone **M4** and the EasyActions rebrand. Everything under
-[§12](#12-planned-not-implemented) is planned, not built.
+25 September 2026, at the end of milestone **M8** (database, "stay signed in", history, Account page,
+daily authenticator code, admin pages, statistics dashboard — see [DASHBOARD.md](DASHBOARD.md)).
+Sign-in, sessions, stored data and the security measures are described in
+**[SECURITY.md](SECURITY.md)**. Everything under [§12](#12-planned-not-implemented) is planned, not built.
 
 ## 1. Purpose
 
 A dashboard for MaskAI engineers: pick a GitHub organization, see every repository with its branches
 and GitHub Actions workflows (live status), trigger `workflow_dispatch` runs in bulk, and read pipeline
-statistics (`vstatistique`), styled with the MASKAI design system.
+and commit statistics on a dashboard, styled with the MASKAI design system.
 
-At M4: sign in with a GitHub App, choose an organization where the app is installed, and browse its
-repositories (search, visibility, language, archived, sort, pages — all kept in the address). Opening a
-repository row shows its branches and its workflows with the status of their latest run on the chosen
-branch. Repositories and workflows can be selected and run in bulk (`workflow_dispatch`) after a
-confirmation, then followed live. Statistics arrive in M5.
+At M5: sign in once with a GitHub App and stay signed in for up to `SESSION_MAX_DAYS` days, choose an
+organization where the app is installed, and browse its repositories (search, visibility, language,
+archived, sort, pages — all kept in the address). Opening a repository row shows its branches and its
+workflows with the status of their latest run on the chosen branch. Repositories and workflows can be
+selected and run in bulk (`workflow_dispatch`) after a confirmation, then followed live. The Account
+page lists your sessions and lets you sign out elsewhere, download your data or delete it. Once a day,
+each browser asks for the 6-digit code of an authenticator app (set up with a QR code at the first
+sign-in). Admins set the GitHub connection and the limits on a Settings page, manage users and read
+the history (M7). Each organization opens on its dashboard (M8, [DASHBOARD.md](DASHBOARD.md)).
 
 Each repository row has its own branch list (`app/components/repos/branch-select.ts`): every branch,
 whether or not a pipeline ever ran on it — default first, then active, then stale. The lists of the
@@ -32,9 +38,11 @@ All versions are pinned exactly (`bunfig.toml`: `exact = true`, `peer = false`).
 | Runtime | Bun 1.3.11 (local); MaskAI images use `oven/bun:1.4.2` — deployment is not set up yet |
 | HTTP | Hono 4.13.9, one app built by `server/app.ts` |
 | Validation | zod 4.6.5, at every edge |
-| Sessions | jose 6.2.12 — encrypted cookies (JWE `dir` + `A256GCM`) |
+| Database | SQLite through `bun:sqlite`, built into Bun (SQLite 3.51.2 in Bun 1.3.11) — no ORM, versioned migrations |
+| Sessions | in the database, GitHub tokens encrypted with AES-256-GCM (`node:crypto`); the sign-in flow cookie is a JWE (jose 6.2.12, `dir` + `A256GCM`) |
 | Web app | TiniJS `@tinijs/core` 0.21.1, `@tinijs/router` 0.21.0, `@tinijs/store` 0.21.0 on Lit 3.3.3 |
 | Styling | Tailwind CSS 4.2.1 through `bun-plugin-tailwind` 0.1.2, `tw-animate-css` 1.4.0, the MASKAI tokens (§9) |
+| Charts | Chart.js 4.5.1 (bar charts only), colours from the MASKAI tokens ([DASHBOARD.md §7](DASHBOARD.md#7-display)) |
 | Language | TypeScript 5.9.3, strict; two programs: `tsconfig.json` (server, domain, scripts, tests) and `app/tsconfig.json` (browser) |
 | Tests | `bun test`; GitHub is faked by a real local HTTP server (`tests/support/fakeGithub.ts`) |
 
@@ -43,8 +51,12 @@ All versions are pinned exactly (`bunfig.toml`: `exact = true`, `peer = false`).
 ```
 Browser ── same origin ──▶ one Bun process
                             ├─ /health, /auth/*, /api/*  → Hono app (server/app.ts)
-                            │     ├─ server/adapters/githubOAuth.ts   → GitHub sign-in: authorize, token, revoke
+                            │     ├─ server/services/{sessions,githubTokens,accountData,twoFactor,settings,dashboardCollector}.ts
+                            │     │     └─ server/repositories/* → SQLite (DATABASE_PATH; schema: server/db/)
+                            │     ├─ server/adapters/githubOAuth.ts   → GitHub sign-in: authorize, token, refresh, revoke
+                            │     ├─ server/adapters/githubConnection.ts → the Settings page's connection test (no token)
                             │     ├─ server/adapters/githubRepos.ts   → installations, repositories, branches (GraphQL)
+                            │     ├─ server/adapters/githubCommits.ts → commit history and branch comparisons (GraphQL)
                             │     ├─ server/adapters/githubActions.ts → workflows, runs, workflow_dispatch
                             │     └─ both through server/adapters/githubApi.ts (shared HTTP layer, user's token)
                             └─ any other path            → the web app (app/)
@@ -53,9 +65,10 @@ Browser ── same origin ──▶ one Bun process
 ```
 
 - `domain/` holds framework-free code shared by both sides; `domain/apiContract.ts` is the single
-  owner of every HTTP payload type. `app/` never imports `server/` (checked by a test).
-- The adapters are the only modules that talk to GitHub. Every call has a timeout
-  (`GITHUB_TIMEOUT_MS`) and **no automatic retry**; responses are validated by zod; GitHub's messages
+  owner of the HTTP payload types (`domain/accountContract.ts` for `/api/account/*`, since
+  `apiContract.ts` reached the 10-export limit). `app/` never imports `server/` (checked by a test).
+- The adapters are the only modules that talk to GitHub. Every call has a timeout (the
+  `githubTimeoutMs` setting) and **no automatic retry**; responses are validated by zod; GitHub's messages
   and bodies never leave the adapter (only a stable failure code does).
 - **Bulk runs (M4).** `app/components/repos/bulk-action-bar.ts` owns the flow: read the workflows of
   every selected repository (4 at a time, 60-second browser cache) → `domain/dispatchPlan.ts` (active
@@ -111,11 +124,27 @@ Browser ── same origin ──▶ one Bun process
 |---|---|
 | `GET /health` | `200 {"status":"ok","service":"pipliner"}` — same contract as the MaskAI services |
 | `GET /auth/login?returnTo=/path` | `302` to GitHub's authorize page (`state` + PKCE S256); sets the short-lived flow cookie |
-| `GET /auth/callback` | checks the flow, exchanges the code, opens the session, `303` to `returnTo`; on failure `303 /login?error=<code>` |
-| `POST /auth/logout` | clears the session, revokes the GitHub token, `204`; needs the app's `Origin` |
-| `GET /api/session` | `200 {"user":{"login","avatarUrl"},"expiresAt","limits":{"dispatchMaxTargets","runPollMinSeconds","runTrackMaxMinutes"}}` or `401`; never the token |
+| `GET /auth/callback` | checks the flow, exchanges the code, opens the session in the database and sets its cookie (`SESSION_MAX_DAYS`), `303` to `returnTo`; on failure `303 /login?error=<code>` |
+| `POST /auth/logout` | closes this browser's session (database and cookie), revokes its GitHub token, `204`; needs the app's `Origin` |
+| `GET /api/session` | `200 {"user":{"login","avatarUrl","role"},"secondFactor","expiresAt","limits":{"dispatchMaxTargets","runPollMinSeconds","runTrackMaxMinutes"}}` or `401`; `secondFactor` = `setup`, `verify` or `verified`; `expiresAt` = end of the session; never a token |
+| every other `/api/*` | `403 second_factor_required` until today's code is given (only the five routes of [SECURITY.md §4](SECURITY.md#4-the-daily-code-two-step-verification-m6) are open before it) |
+| `GET /api/account/two-factor` | `{enabled, confirmedAt, recoveryCodesLeft}` (`domain/twoFactorContract.ts`) |
+| `POST /api/account/two-factor/enrollment` | body `{code?}` (a current code, required to *change* app): new pending secret, `{manualKey, issuer, account}` |
+| `GET /api/account/two-factor/enrollment/qr.svg` | the pending secret as a QR code (`image/svg+xml`, `no-store`); `404` without a setup in progress |
+| `POST /api/account/two-factor/enrollment/confirm` | body `{code}`: confirms the app, `{recoveryCodes}` (shown once), new session cookie |
+| `POST /api/account/two-factor/verify` | body `{code}` or `{recoveryCode}`: `204` and a new session cookie; `400 invalid_code`, `429 code_locked` (+ `Retry-After`) |
+| `POST /api/account/two-factor/recovery-codes` | body `{code}`: ten new recovery codes, `{recoveryCodes}` |
+| `GET /api/account/sessions` | `{sessions: [{createdAt, lastSeenAt, expiresAt, current}]}`, newest first (`domain/accountContract.ts`) |
+| `POST /api/account/sessions/sign-out-others` | closes the user's other sessions and revokes their tokens: `200 {ended}` |
+| `POST /api/account/sessions/sign-out-all` | closes every session of the user, this one included, and clears the cookie: `204` |
+| `GET /api/account/export` | the user's data as a JSON download (`Content-Disposition: attachment`) — no token, ciphertext or hash |
+| `POST /api/account/delete` | body `{confirmLogin}` (the user's GitHub login, any case, else `400`): erases the user, `204` |
+| `GET /api/admin/settings` · `PUT …/limits` · `POST …/github/test` · `PUT …/github` | admins only (`403`): the settings without the secret (`clientSecretSet`); `{values}`; `{webUrl, apiUrl}` → `{ok, message}`; `{webUrl, apiUrl, clientId, clientSecret, code}` → `{signedEveryoneOut}` (`domain/settingsContract.ts`) |
+| `GET /api/admin/users` · `POST /api/admin/users/:id/{role,reset-two-factor,sign-out,delete}` | admins only: `{users}`; `role` body `{role, code}`, `reset-two-factor` and `delete` body `{code}` → `204`; `sign-out` → `{ended}` (`domain/adminContract.ts`) |
+| `GET /api/admin/history?before=&action=` | admins only: `{entries, nextBefore}`, newest first, 50 per page |
 | `GET /api/orgs` | organizations where the app is installed and the user has access (personal accounts excluded), and the app's install link |
 | `GET /api/orgs/:org/repos` | the repositories the app sees in that organization, up to `REPOS_MAX` (`truncated` above it); `400` for an invalid name, `404` when the app is not installed there |
+| `GET /api/orgs/:org/dashboard?days=7\|30\|90[&fresh=1]` | the organization's statistics (`domain/dashboardContract.ts`): counts only, never an identity; `400` for another period; see [DASHBOARD.md](DASHBOARD.md) |
 | `GET /api/repos/:owner/:repo/branches` | `{defaultBranch, branches: [{name, committedAt, active}], truncated}`: default branch first, then by last commit; up to `BRANCHES_MAX`; `active` = commit within `ACTIVE_BRANCH_DAYS` |
 | `GET /api/repos/:owner/:repo/workflows?branch=` | `{branch, workflows: [{id, name, path, state, htmlUrl, latestRun}]}`; `400` without a valid branch |
 | `GET /api/repos/:owner/:repo/runs?ids=1,2&since=<ISO 8601>` | `{runs}`: the current state of up to 100 tracked `workflow_dispatch` runs created since `since` |
@@ -132,55 +161,73 @@ back to sign-in), `403 forbidden`, `403 sso_required` (+ `ssoUrl`), `404 not_fou
 (+ `retryAfterSeconds` and `Retry-After`), `422 unprocessable`, `502 upstream`. Sign-in failures use the
 codes `expired`, `denied`, `github`, `config`, `unavailable`, `ended`, shown as English messages by the
 sign-in page. Web app routes: `/` and `/login` (sign-in), `/orgs` (organization picker),
-`/orgs/:org?q=&visibility=&language=&archived=1&sort=name&page=` (repositories), `**` (404).
+`/orgs/:org/dashboard?days=` (the organization's first tab),
+`/orgs/:org?q=&visibility=&language=&archived=1&sort=name&page=` (repositories), `/account` (your
+sessions, daily code and data, same layout as `/orgs`), `/two-factor?returnTo=&mode=change` (set up the
+authenticator app, give today's code, or change app), `/settings`, `/settings/users`, `/settings/history`
+(admins), `**` (404). Error codes since M6 also include
+`second_factor_required`, `invalid_code` and `code_locked`.
 
 ## 5. Data ownership
 
-Pipliner owns no table and no store. The only place that holds data is the **session cookie**, in the
-user's own browser, encrypted: GitHub user id, login, avatar URL, GitHub access token, expiry. It is
-erased by sign-out (and the token revoked) or by expiry (8 hours, the token's own lifetime). Nothing
-is kept on the server. The web app keeps its selection, the runs it follows and a 60-second read cache
-in memory only: a reload clears them, and sign-out reloads the page (`app/layouts/dashboard.ts`), so
-no timer keeps polling for a session that has ended.
+Since M5, Pipliner owns one SQLite database and is its only writer: tables `users`, `sessions` (GitHub
+tokens encrypted), `audit_events` (the history), `second_factors`, `recovery_codes` and `settings`. Every query lives in `server/repositories/`; the
+schema changes only through `server/db/migrations/` and `bun run db:migrate`. What each table holds,
+how it is erased and exported, and the file's protection: [SECURITY.md §1–§2](SECURITY.md#1-what-easyactions-stores).
+The browser holds only the session cookie (a random id). The web app keeps its selection, the runs it
+follows and a 60-second read cache in memory only: a reload clears them, and sign-out reloads the page
+(`app/layouts/dashboard.ts`), so no timer keeps polling for a session that has ended.
 
 ## 6. Configuration
 
-Declared in `.env.example`; Bun loads a local `.env` automatically. Every variable is required:
+Declared in `.env.example`; Bun loads a local `.env` automatically. The variables below are required:
 `server/config/env.ts` stops the boot and lists every missing, placeholder (`<TO_PROVIDE>`) or invalid
-**name** — never a value.
+**name** — never a value. Since M7 the GitHub connection and the limits are **website settings**, in
+the database ([SECURITY.md §7](SECURITY.md#7-settings-and-administration-m7)); `.env` keeps them only
+for `bun run settings:import-env`.
 
 | Variable | Purpose |
 |---|---|
 | `HOST` | Interface to bind. `127.0.0.1` outside a container, never `0.0.0.0` from a host |
 | `PORT` | Port serving both the app and its API |
 | `APP_ORIGIN` | Exact public origin; builds the GitHub callback URL and is the only accepted `Origin` on POST. https, or http on loopback |
-| `SESSION_SECRET` | ≥ 32 characters; the cookie encryption key is its SHA-256 (`openssl rand -base64 32`) |
-| `GITHUB_WEB_URL` / `GITHUB_API_URL` | github.com and api.github.com, or a GitHub Enterprise Server. https (http on loopback only, for tests) |
-| `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | the Pipliner GitHub App's credentials (secret) |
-| `GITHUB_TIMEOUT_MS` | timeout of every GitHub call, 1000–60000 |
-| `REPOS_MAX` | repositories read at most per organization (pages of 100), 1–10000 |
-| `BRANCHES_MAX` | branches read at most per repository (pages of 100), 1–1000 |
-| `ACTIVE_BRANCH_DAYS` | a branch without a commit for longer is listed under "Stale", 1–3650 |
-| `DISPATCH_MAX_TARGETS` | pipelines one run may start (checked by the dialog and again by the server), 1–200 |
-| `DISPATCH_CONCURRENCY` | dispatches sent to GitHub at the same time, 1–10 |
-| `RUN_POLL_MIN_SECONDS` | minimum interval between two live-status checks, 2–300 |
-| `RUN_TRACK_MAX_MINUTES` | how long started runs are followed, 1–720 |
+| `SESSION_SECRET` | ≥ 32 characters; the sign-in flow cookie's key is its SHA-256 (`openssl rand -base64 32`) |
+| `DATA_ENCRYPTION_KEY` | ≥ 32 characters, not the same as `SESSION_SECRET`; encrypts the GitHub tokens in the database (HKDF-SHA256). Changing it signs everybody out |
+| `DATABASE_PATH` | the SQLite file, created by `bun run db:migrate` (server stopped) |
+| `HTTP_IDLE_TIMEOUT_SECONDS` | seconds a connection may stay silent before it is closed, 30–255 (Bun's own 10 s cut bulk runs) |
+| `SESSION_MAX_DAYS` | days a browser stays signed in, 1–180 (never beyond GitHub's 6-month refresh token) |
+| `SESSIONS_PER_USER_MAX` | browsers one person can be signed in on; one more signs the oldest out, 1–10 |
+| `AUDIT_RETENTION_DAYS` | days the history is kept, 30–3650 |
+| `TWO_FACTOR_EVERY_HOURS` | hours an accepted 6-digit code stays valid for a browser (24 = daily), 1–168 |
+| `TWO_FACTOR_MAX_ATTEMPTS` | wrong codes before a lock, 3–20 |
+| `TWO_FACTOR_LOCK_MINUTES` | first lock in minutes, doubled at each next lock (24 h at most), 1–1440 |
+| Import only: `GITHUB_WEB_URL`, `GITHUB_API_URL`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_TIMEOUT_MS`, `REPOS_MAX`, `BRANCHES_MAX`, `ACTIVE_BRANCH_DAYS`, `DISPATCH_MAX_TARGETS`, `DISPATCH_CONCURRENCY`, `RUN_POLL_MIN_SECONDS`, `RUN_TRACK_MAX_MINUTES` | read only by `bun run settings:import-env` (`scripts/settings.ts`); ranges and defaults: `domain/settingsCatalog.ts` |
 
 ## 7. Failure directions (implemented)
 
 | Failure | Direction | Where |
 |---|---|---|
 | Required variable missing, placeholder or invalid | **Closed at boot**, all names listed | `server/config/env.ts` |
+| Database file missing, or its schema not at this code's version | **Closed at boot**, with the command to run (`bun run db:migrate`) | `server/db/database.ts` |
+| GitHub connection missing from the database, or its secret unreadable | **Closed at boot**, naming `bun run settings:import-env` | `server/services/settings.ts` |
+| Admin pages and actions: not an admin, no current code, invalid settings, last admin | **Closed**, see [SECURITY.md §7](SECURITY.md#7-settings-and-administration-m7) | `server/middleware/admin.ts`, `server/routers/admin*.ts` |
 | `dist/app/index.html` missing in production | **Closed at boot** (`bun run build` first) | `server/index.ts` |
 | Unexpected error in a handler | **Closed**: generic 500; logged by `errName`/`errCode` only | `server/exceptions/errorHandler.ts` |
-| Session cookie missing, tampered, expired, or a flow cookie offered as a session | **Closed**: `401` / redirect to sign-in | `server/auth/sessionCookie.ts`, `server/middleware/session.ts` |
+| Session cookie missing or unknown, or session expired | **Closed**: `401` / redirect to sign-in | `server/services/sessions.ts`, `server/middleware/session.ts` |
+| Flow cookie missing, tampered, expired, or another JWE offered as one | **Closed**: no sign-in | `server/auth/sessionCookie.ts` |
+| Token refresh refused, unreachable, or a stored token unreadable | see [SECURITY.md §5](SECURITY.md#5-github-tokens) | `server/services/githubTokens.ts` |
+| No 6-digit code today, wrong or reused code, too many wrong codes | **Closed** (`403` / `400` / `429`), see [SECURITY.md §4](SECURITY.md#4-the-daily-code-two-step-verification-m6) | `server/middleware/secondFactor.ts`, `server/services/twoFactor.ts` |
 | Callback without flow cookie, without code, or with a different `state` | **Closed**: no token exchange is attempted | `server/routers/auth.ts` |
 | GitHub refuses or fails the exchange (incl. HTTP 200 + `error`), or `/user` fails | **Closed**: no session; the token, if any, is revoked | `server/routers/auth.ts` |
 | GitHub App issues a non-expiring token | **Closed**: token revoked, `/login?error=config` | `server/routers/auth.ts` |
 | POST without the app's exact `Origin` (missing included) | **Closed**: `403` | `server/middleware/originGuard.ts` |
 | Token revocation fails at sign-out | **Open**: cookie already cleared, logged; the token expires within 8 h | `server/routers/auth.ts` |
-| GitHub rejects the token (401) during a request | **Closed**: our `401`; the app goes to sign-in (`error=ended`) and comes back | `server/exceptions/errorHandler.ts`, `app/services/api-client.ts` |
-| GitHub rate limit, SSO, refusal, outage or malformed answer | **Closed**: a stable error code; the page shows an explanation, "Try again", and the SSO link when there is one — never stale or partial data | `server/adapters/githubApi.ts`, `app/components/empty-state.ts` |
+| GitHub rejects the session's current token (401) during a request | **Closed**: session deleted, our `401`; the app goes to sign-in (`error=ended`) and comes back | `server/middleware/session.ts`, `app/services/api-client.ts` |
+| GitHub rejects a token that was refreshed during the request | **Closed** for the request (`502`, "try again"); the session stays open | `server/middleware/session.ts` |
+| History cannot be written | **Closed**: same transaction, the action does not happen | `server/services/sessions.ts`, `accountData.ts` |
+| Purge of expired sessions or old history fails | **Open**: logged (`db.purge_failed`), retried at the next start or sign-in | `server/services/sessions.ts` |
+| GitHub rate limit, SSO, refusal, outage or malformed answer | **Closed**: a stable error code; the page shows an explanation, "Try again", and the SSO link when there is one — never stale or partial data (one written exception: the dashboard, below) | `server/adapters/githubApi.ts`, `app/components/empty-state.ts` |
+| Dashboard: one repository unreadable or not read in time, a limit reached | **Open**, each gap named, no comparison; list failure, rate limit, refused token: **closed** ([DASHBOARD.md §5](DASHBOARD.md#5-partial-data--a-written-exception)) | `server/services/dashboardCollector.ts` |
 | A `Link` "next page" pointing to another host | **Closed**: not followed (the token never leaves our GitHub) | `server/adapters/githubApi.ts` |
 | Organization list fails in the header switcher | **Open**: the switcher shows the current organization only; `/orgs` shows the error | `app/layouts/dashboard.ts` |
 | Browser cannot check the session (server down) on a signed-in page | **Closed**: to sign-in with `error=unavailable` | `app/layouts/dashboard.ts` |
@@ -197,35 +244,9 @@ Declared in `.env.example`; Bun loads a local `.env` automatically. Every variab
 
 ## 8. Security
 
-- **Sign-in**: GitHub App web flow with a random `state` (constant-time comparison) and PKCE S256;
-  both live in an encrypted, HttpOnly, 10-minute flow cookie. `returnTo` must be a path of our own
-  origin (single leading `/`, no `//`, no backslash), otherwise `/orgs` — no open redirect.
-- **Session**: encrypted JWE cookie, `HttpOnly`, `SameSite=Lax`, `Path=/`, lifetime = the GitHub
-  token's (8 h); `Secure` and the `__Host-` prefix whenever `APP_ORIGIN` is https. The browser never
-  sees the GitHub token; `/api/session` returns login and avatar only. The refresh token GitHub sends
-  is never stored: after 8 h the user goes through GitHub again (one redirect, the app is already
-  authorized). The app must have "Expire user authorization tokens" enabled, else sign-in is refused.
-- **Sign-out** revokes the token with `DELETE /applications/{client_id}/token`, authenticated with the
-  app's client ID and secret (Basic) — the historical documented behaviour; GitHub's current page no
-  longer states it, so a failure is only logged (`auth.revoke_failed`). To confirm on the first real use.
-- **CSRF**: every POST must carry the app's exact `Origin` (`server/middleware/originGuard.ts`), plus
-  `SameSite=Lax` cookies. `/api` responses are `Cache-Control: no-store`.
-- **Bulk runs**: the confirmation dialog lists every target; when any target is on its repository's
-  default branch (production for MaskAI), the Run button stays disabled until the organization's name
-  is typed. The dialog is only a convenience: the server re-validates names, branch, workflow id, cap,
-  session and `Origin`. The browser selects repositories and workflows, never raw GitHub URLs.
-- **Headers** (`hono/secure-headers`, `server/app.ts`), on every Hono response including the
-  production page: CSP `default-src 'self'; base-uri 'none'; font-src 'self' data:; form-action 'self';
-  frame-ancestors 'none'; img-src 'self' <GitHub avatars>; object-src 'none'`, `X-Frame-Options: DENY`,
-  `Referrer-Policy: same-origin`, `X-Content-Type-Options: nosniff`. A "Run pipelines" button must
-  never be framable (clickjacking). Avatars come from `https://avatars.githubusercontent.com`, or from
-  the GitHub Enterprise Server's origin / `avatars.<host>`.
-- `font-src data:` exists because Bun's CSS bundler inlines small `url()` assets (the fonts) as `data:`
-  URLs and has no option to stop it; the data comes from our own CSS bundle.
-- **Logging** (`server/config/logger.ts`): one JSON line per event, allow-list of fields copied one by
-  one (`route`, `method`, `status`, `durationMs`, `requestId`, `upstream`, `errName`, `errCode`). No
-  error object, body, header, upstream URL, token, login or other personal data. `console.*` is banned
-  outside it (checked by a test).
+Sign-in, "stay signed in" sessions, token encryption and refresh, the history, export and erasure,
+CSRF, bulk-run safeguards, headers and logging are described in **[SECURITY.md](SECURITY.md)** — one
+copy, kept true against the code.
 
 ## 9. Design system — written exception to CLAUDE.md §6.1
 
@@ -319,15 +340,25 @@ New GitHub App — or under the organization's settings):
   the organization (Install App).
 
 **2. Local configuration** — create `.env` from the template (Bun loads it at start; it is git-ignored,
-never commit it), then open it in an editor and replace every `<TO_PROVIDE>`: `SESSION_SECRET` with
-the output of `openssl rand -base64 32`, `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET` with the
-app's values.
+never commit it), then open it in an editor and replace every `<TO_PROVIDE>`: `SESSION_SECRET` and
+`DATA_ENCRYPTION_KEY` each with a different output of `openssl rand -base64 32`,
+`GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET` with the app's values. Then create the database
+(`db:migrate` again after every upgrade, with the server stopped) and copy the GitHub connection into it:
 
 ```bash
 bun install --frozen-lockfile
 cp .env.example .env
 openssl rand -base64 32
+openssl rand -base64 32
+bun run db:migrate
+bun run settings:import-env
 ```
+
+After your first sign-in, make yourself the first admin (replace the login with yours):
+`bun run users:promote your-github-login`.
+
+`bun run db:status` tells whether the database is ready; `bun run db:rollback` removes the last
+migration (it asks for `--yes` when that deletes data — back up the file first).
 
 **3. Development server** — http://127.0.0.1:8094 with hot reload. After editing `.env`, stop it with
 Ctrl+C and start it again: `.env` is read only at start.
@@ -362,8 +393,7 @@ bun install --frozen-lockfile && bun run typecheck && bun test && bun run build 
 
 ## 12. Planned (not implemented)
 
-Delivered milestone by milestone, each stopping for review: M5 `vstatistique` (statistics). Decisions
-already taken:
-GitHub App with organization scope only, one branch per repository per run, plain `fetch` adapters
-instead of Octokit (no hidden retries of non-idempotent dispatches), code comments and test names in
-French, UI and documentation in English.
+Nothing is planned now: M5 to M8, approved on 25 September 2026, are delivered. Decisions kept for what
+comes next: GitHub App with organization scope only, one branch per
+repository per run, plain `fetch` adapters instead of Octokit (no hidden retries of non-idempotent
+dispatches), code comments and test names in French, UI and documentation in English.

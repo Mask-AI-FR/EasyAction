@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testDatabase } from "../support/testDatabase.ts";
 import { buildApp, serveBuiltApp } from "../../server/app.ts";
 import { parseEnv } from "../../server/config/env.ts";
 import { buildWebApp } from "../../scripts/buildApp.ts";
@@ -84,7 +85,7 @@ describe("application installable sur le bureau", () => {
   });
 
   test("en production, manifeste et icônes sont servis avec leur type et revalidés à chaque visite", async () => {
-    const instance = buildApp(parseEnv(process.env));
+    const instance = buildApp(parseEnv(process.env), testDatabase());
     serveBuiltApp(instance, installableDir);
     const manifest = await instance.request(manifestHref);
     expect(manifest.headers.get("content-type")).toContain("application/manifest+json");

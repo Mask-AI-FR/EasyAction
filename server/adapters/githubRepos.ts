@@ -37,6 +37,8 @@ export interface RepoBranches {
   readonly defaultBranch: string;
   readonly branches: BranchSummary[];
   readonly truncated: boolean;
+  /** Nombre exact de branches du dépôt, même au-delà du plafond lu (tableau de bord). */
+  readonly totalCount: number;
 }
 
 /** `GET /user` : l'utilisateur à qui appartient le jeton. */
@@ -93,6 +95,7 @@ const BRANCHES_QUERY = `query($owner: String!, $name: String!, $cursor: String) 
   repository(owner: $owner, name: $name) {
     defaultBranchRef { name }
     refs(refPrefix: "refs/heads/", first: 100, after: $cursor, orderBy: {field: ALPHABETICAL, direction: ASC}) {
+      totalCount
       pageInfo { hasNextPage endCursor }
       nodes { name target { ... on Commit { committedDate } } }
     }
@@ -113,9 +116,11 @@ export async function listBranches(
   let cursor: string | null = null;
   let defaultBranch = "";
   let truncated = false;
+  let totalCount = 0;
   do {
     const repository = await branchesPage(github, token, repo, cursor);
     defaultBranch = repository.defaultBranchRef?.name ?? defaultBranch;
+    totalCount = repository.refs.totalCount;
     for (const node of repository.refs.nodes) {
       found.push({ name: node.name, committedAt: node.target?.committedDate ?? null });
     }
@@ -123,7 +128,7 @@ export async function listBranches(
     truncated = cursor !== null && found.length >= limits.max;
   } while (cursor && !truncated);
   const branches = rankBranches(found.slice(0, limits.max), defaultBranch, limits.activeDays);
-  return { defaultBranch, branches, truncated };
+  return { defaultBranch, branches, truncated, totalCount: Math.max(totalCount, found.length) };
 }
 
 async function branchesPage(github: GitHubSettings, token: string, repo: RepoPath, cursor: string | null) {
@@ -161,7 +166,7 @@ function rankBranches(
 }
 
 /** GraphQL : `/graphql` sur api.github.com, mais `/api/graphql` sur GitHub Enterprise Server. */
-function graphqlUrl(apiUrl: string): string {
+export function graphqlUrl(apiUrl: string): string {
   return apiUrl.endsWith("/api/v3") ? `${apiUrl.slice(0, -3)}graphql` : `${apiUrl}/graphql`;
 }
 

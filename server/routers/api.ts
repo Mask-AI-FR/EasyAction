@@ -6,6 +6,7 @@ import type {
   SessionBody,
   WorkflowsBody,
 } from "../../domain/apiContract.ts";
+import { DASHBOARD_DAYS, type DashboardBody, type DashboardDays } from "../../domain/dashboardContract.ts";
 import type { DispatchBody, RunsBody } from "../../domain/dispatchContract.ts";
 import { latestRunByWorkflow } from "../../domain/runStatus.ts";
 import { dispatchWorkflow, listRecentRuns, listWorkflows } from "../adapters/githubActions.ts";
@@ -16,17 +17,24 @@ import {
   listOrgInstallations,
   type OrgInstallation,
 } from "../adapters/githubRepos.ts";
-import type { UserSession } from "../auth/sessionCookie.ts";
-import type { Limits } from "../config/env.ts";
+import type { GitHubSettings, Limits } from "../config/env.ts";
 import { logger } from "../config/logger.ts";
 import { HttpError } from "../exceptions/HttpError.ts";
 import { originGuard } from "../middleware/originGuard.ts";
+import { requireAdmin } from "../middleware/admin.ts";
+import { requireSecondFactor } from "../middleware/secondFactor.ts";
 import { requireSession, type SessionVariables } from "../middleware/session.ts";
 import { BranchName, DispatchRequest, OrgLogin, RepoName, RunsQuery } from "../schemas/api.schema.ts";
 import { runDispatches } from "../services/dispatchRunner.ts";
 import { trackRuns } from "../services/runTracker.ts";
+import type { ActiveSession } from "../services/sessions.ts";
+import { secondFactorStateOf, type TwoFactorStore } from "../services/twoFactor.ts";
 import { parseJsonBody } from "../validators/parseJsonBody.ts";
+import { accountRouter } from "./account.ts";
+import { adminSettingsRouter } from "./adminSettings.ts";
+import { adminUsersRouter } from "./adminUsers.ts";
 import type { AuthDeps } from "./auth.ts";
+import { twoFactorRouter } from "./twoFactor.ts";
 
 type ApiContext = Context<{ Variables: SessionVariables }>;
 
@@ -35,6 +43,15 @@ const noStore: MiddlewareHandler = async (c, next) => {
   c.header("Cache-Control", "no-store");
   await next();
 };
+
+/**
+ * Un lot de lancements peut durer plusieurs minutes (GitHub répond à chaque cible) : son jeton doit
+ * rester valable jusqu'au bout, sinon un renouvellement en route invaliderait celui du lot.
+ */
+const DISPATCH_TOKEN_VALIDITY_MS = 10 * 60_000;
+
+/** Marge de validité du jeton au-delà de l'échéance du tableau de bord (la dernière réponse de GitHub). */
+const DASHBOARD_TOKEN_MARGIN_MS = 60_000;
 
 /**
  * `/api/*`. Les gardes sont posées AVANT toute route (motif `protectedRouter` de Billing) : une
@@ -48,11 +65,21 @@ export function apiRouter(deps: AuthDeps): Hono<{ Variables: SessionVariables }>
     "*",
     noStore,
     originGuard(deps.env.appOrigin),
-    requireSession(deps.key, deps.cookies.sessionName),
+    requireSession({ store: deps.sessions, tokens: deps.tokens, cookieName: deps.cookies.sessionName }),
+    requireSecondFactor(deps.twoFactor),
   );
-  router.get("/session", (c) => c.json(sessionBodyOf(c.get("session"), deps.env.limits)));
+  // Montés APRÈS les gardes, et sans garde propre : Hono réenregistre le `use("*")` d'un sous-routeur
+  // sur le chemin de montage, ce qui doublerait la session.
+  router.route("/account/two-factor", twoFactorRouter(deps));
+  router.route("/account", accountRouter(deps));
+  // Tout `/api/admin/*` : administrateurs seulement, garde posée une fois, avant les routes.
+  router.use("/admin/*", requireAdmin);
+  router.route("/admin/settings", adminSettingsRouter(deps));
+  router.route("/admin", adminUsersRouter(deps));
+  router.get("/session", (c) => c.json(sessionBodyOf(c.get("session"), deps.settings().limits, deps.twoFactor)));
   router.get("/orgs", async (c) => c.json(await orgsBody(c, deps)));
   router.get("/orgs/:org/repos", async (c) => c.json(await reposBody(c, deps)));
+  router.get("/orgs/:org/dashboard", async (c) => c.json(await dashboardBody(c, deps)));
   router.get("/repos/:owner/:repo/branches", async (c) => c.json(await branchesBody(c, deps)));
   router.get("/repos/:owner/:repo/workflows", async (c) => c.json(await workflowsBody(c, deps)));
   router.get("/repos/:owner/:repo/runs", async (c) => c.json(await runsBody(c, deps)));
@@ -60,10 +87,11 @@ export function apiRouter(deps: AuthDeps): Hono<{ Variables: SessionVariables }>
   return router;
 }
 
-/** Ce que l'application a le droit de savoir de la session : jamais le jeton GitHub. */
-function sessionBodyOf(session: UserSession, limits: Limits): SessionBody {
+/** Ce que l'application a le droit de savoir de la session : jamais un jeton GitHub. */
+function sessionBodyOf(session: ActiveSession, limits: Limits, twoFactor: TwoFactorStore): SessionBody {
   return {
-    user: { login: session.login, avatarUrl: session.avatarUrl },
+    user: { login: session.login, avatarUrl: session.avatarUrl, role: session.role },
+    secondFactor: secondFactorStateOf(twoFactor, session),
     expiresAt: new Date(session.expiresAt * 1000).toISOString(),
     limits: {
       dispatchMaxTargets: limits.dispatchMaxTargets,
@@ -74,8 +102,8 @@ function sessionBodyOf(session: UserSession, limits: Limits): SessionBody {
 }
 
 async function orgsBody(c: ApiContext, deps: AuthDeps): Promise<OrgsBody> {
-  const { github } = deps.env;
-  const installations = await listOrgInstallations(github, c.get("session").accessToken);
+  const { github } = deps.settings();
+  const installations = await listOrgInstallations(github, await c.get("githubToken")());
   const appSlug = installations[0]?.appSlug;
   return {
     orgs: installations.map((installation) => installation.org),
@@ -85,11 +113,12 @@ async function orgsBody(c: ApiContext, deps: AuthDeps): Promise<OrgsBody> {
 
 async function reposBody(c: ApiContext, deps: AuthDeps): Promise<ReposBody> {
   const installation = await installationFor(c, deps);
+  const { github, limits } = deps.settings();
   const { repos, totalCount } = await listInstallationRepos(
-    deps.env.github,
-    c.get("session").accessToken,
+    github,
+    await c.get("githubToken")(),
     installation.id,
-    deps.env.limits.reposMax,
+    limits.reposMax,
   );
   return {
     org: installation.org.login,
@@ -100,6 +129,46 @@ async function reposBody(c: ApiContext, deps: AuthDeps): Promise<ReposBody> {
 }
 
 /**
+ * Statistiques d'une organisation (`services/dashboardCollector.ts`). Le jeton doit tenir jusqu'à
+ * l'échéance (un renouvellement en route invaliderait celui de la collecte) ; l'accès à l'organisation
+ * est revérifié chez GitHub à CHAQUE appel, même quand le résultat vient de la mémoire.
+ */
+async function dashboardBody(c: ApiContext, deps: AuthDeps): Promise<DashboardBody> {
+  const days = dashboardDaysOf(c.req.query("days"));
+  const { github, limits } = deps.settings();
+  const budgetMs = dashboardBudgetMs(limits, github, deps.env.httpIdleTimeoutSeconds);
+  const deadline = Date.now() + budgetMs;
+  const token = await c.get("githubToken")({ minValidityMs: budgetMs + DASHBOARD_TOKEN_MARGIN_MS });
+  const installation = await installationFor(c, deps);
+  return deps.dashboard.dashboard({
+    session: c.get("session"),
+    installation,
+    days,
+    fresh: c.req.query("fresh") === "1",
+    github,
+    token,
+    limits,
+    deadline,
+  });
+}
+
+function dashboardDaysOf(value: string | undefined): DashboardDays {
+  const days = DASHBOARD_DAYS.find((option) => String(option) === (value ?? "30"));
+  if (days === undefined) throw new HttpError(400, "bad_request", "Invalid dashboard period");
+  return days;
+}
+
+/**
+ * Temps accordé à la lecture de GitHub : le réglage, mais assez court pour qu'une requête lancée juste
+ * avant l'échéance tienne encore dans l'inactivité HTTP de Bun — sinon Bun coupe la connexion et le
+ * navigateur ne reçoit jamais la réponse.
+ */
+function dashboardBudgetMs(limits: Limits, github: GitHubSettings, idleTimeoutSeconds: number): number {
+  const ceiling = (idleTimeoutSeconds - 5) * 1000 - github.timeoutMs;
+  return Math.max(1000, Math.min(limits.statsDeadlineSeconds * 1000, ceiling));
+}
+
+/**
  * L'installation de l'app sur l'organisation demandée, parmi celles que l'utilisateur voit : c'est
  * ce qui borne l'accès. Une organisation absente de la liste répond 404, qu'elle existe ou non.
  */
@@ -107,7 +176,7 @@ async function installationFor(c: ApiContext, deps: AuthDeps): Promise<OrgInstal
   const org = OrgLogin.safeParse(c.req.param("org"));
   if (!org.success) throw new HttpError(400, "bad_request", "Invalid organization name");
   const wanted = org.data.toLowerCase();
-  const installations = await listOrgInstallations(deps.env.github, c.get("session").accessToken);
+  const installations = await listOrgInstallations(deps.settings().github, await c.get("githubToken")());
   const installation = installations.find((item) => item.org.login.toLowerCase() === wanted);
   if (!installation) {
     throw new HttpError(404, "not_found", "The GitHub App is not installed on this organization");
@@ -124,21 +193,26 @@ function repoPathOf(c: ApiContext): RepoPath {
 }
 
 async function branchesBody(c: ApiContext, deps: AuthDeps): Promise<BranchesBody> {
-  const { limits } = deps.env;
-  return listBranches(deps.env.github, c.get("session").accessToken, repoPathOf(c), {
+  const { github, limits } = deps.settings();
+  // Nom validé AVANT de demander un jeton : une adresse invalide ne déclenche aucun renouvellement.
+  const repo = repoPathOf(c);
+  const { defaultBranch, branches, truncated } = await listBranches(github, await c.get("githubToken")(), repo, {
     max: limits.branchesMax,
     activeDays: limits.activeBranchDays,
   });
+  // Forme de réponse inchangée (interface publique) : le total ne sert qu'au tableau de bord.
+  return { defaultBranch, branches, truncated };
 }
 
 async function workflowsBody(c: ApiContext, deps: AuthDeps): Promise<WorkflowsBody> {
   const repo = repoPathOf(c);
   const branch = BranchName.safeParse(c.req.query("branch"));
   if (!branch.success) throw new HttpError(400, "bad_request", "Invalid branch name");
-  const token = c.get("session").accessToken;
+  const token = await c.get("githubToken")();
+  const { github } = deps.settings();
   const [definitions, runs] = await Promise.all([
-    listWorkflows(deps.env.github, token, repo),
-    listRecentRuns(deps.env.github, token, repo, { branch: branch.data }),
+    listWorkflows(github, token, repo),
+    listRecentRuns(github, token, repo, { branch: branch.data }),
   ]);
   const latest = latestRunByWorkflow(runs);
   return {
@@ -152,7 +226,7 @@ async function runsBody(c: ApiContext, deps: AuthDeps): Promise<RunsBody> {
   const query = RunsQuery.safeParse({ ids: c.req.query("ids"), since: c.req.query("since") });
   if (!query.success) throw new HttpError(400, "bad_request", "Invalid run query");
   const ids = query.data.ids.split(",").map(Number);
-  const runs = await trackRuns(deps.env.github, c.get("session").accessToken, repo, {
+  const runs = await trackRuns(deps.settings().github, await c.get("githubToken")(), repo, {
     ids,
     since: query.data.since,
   });
@@ -166,14 +240,15 @@ async function runsBody(c: ApiContext, deps: AuthDeps): Promise<RunsBody> {
  */
 async function dispatchBody(c: ApiContext, deps: AuthDeps): Promise<DispatchBody> {
   const { targets } = await parseJsonBody(c, DispatchRequest);
-  if (targets.length > deps.env.limits.dispatchMaxTargets) {
+  const { github, limits } = deps.settings();
+  if (targets.length > limits.dispatchMaxTargets) {
     throw new HttpError(400, "bad_request", "Too many pipelines in one request");
   }
-  const token = c.get("session").accessToken;
+  const token = await c.get("githubToken")({ minValidityMs: DISPATCH_TOKEN_VALIDITY_MS });
   const outcomes = await runDispatches(
     targets,
-    (target) => dispatchWorkflow(deps.env.github, token, target),
-    deps.env.limits.dispatchConcurrency,
+    (target) => dispatchWorkflow(github, token, target),
+    limits.dispatchConcurrency,
   );
   logger.info("dispatch.completed", { route: "/api/dispatches", method: "POST", status: 200 });
   return { outcomes };

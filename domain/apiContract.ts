@@ -1,9 +1,11 @@
+import type { AccountRole } from "./accountContract.ts";
 import type {
   BranchSummary,
   OrgSummary,
   RepoSummary,
   WorkflowSummary,
 } from "./githubTypes.ts";
+import type { SecondFactorState } from "./twoFactorContract.ts";
 
 /**
  * Contrat des réponses HTTP de Pipliner : ce module est le propriétaire unique des formes de charge
@@ -28,7 +30,13 @@ export type ApiErrorCode =
   | "unprocessable"
   | "rate_limited"
   | "upstream"
-  | "internal";
+  | "internal"
+  /** Le code à 6 chiffres du jour est à saisir (ou l'application d'authentification à mettre en place). */
+  | "second_factor_required"
+  /** Code à 6 chiffres ou code de secours faux, ou déjà utilisé. */
+  | "invalid_code"
+  /** Trop de codes faux : réessayer après `retryAfterSeconds`. */
+  | "code_locked";
 
 /**
  * Corps de toute réponse d'erreur. `message` est toujours un texte à nous : un message ou un corps
@@ -38,7 +46,7 @@ export interface ApiErrorBody {
   readonly detail: {
     readonly code: ApiErrorCode;
     readonly message: string;
-    /** `rate_limited` : secondes à attendre avant de réessayer. */
+    /** `rate_limited`, `code_locked` : secondes à attendre avant de réessayer. */
     readonly retryAfterSeconds?: number;
     /** `sso_required` : page GitHub où autoriser l'accès SAML de l'organisation. */
     readonly ssoUrl?: string;
@@ -50,8 +58,11 @@ export interface SessionBody {
   readonly user: {
     readonly login: string;
     readonly avatarUrl: string;
+    readonly role: AccountRole;
   };
-  /** Fin de la session (ISO 8601, UTC) : c'est celle du jeton GitHub. */
+  /** Où en est le code à 6 chiffres de cette session : à mettre en place, à saisir, ou saisi. */
+  readonly secondFactor: SecondFactorState;
+  /** Fin de la session (ISO 8601, UTC) : `SESSION_MAX_DAYS` après la connexion GitHub, au plus. */
   readonly expiresAt: string;
   /** Plafonds de la configuration serveur dont l'interface a besoin (jamais figés dans le bundle). */
   readonly limits: {

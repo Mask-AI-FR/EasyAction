@@ -3,22 +3,14 @@ import { EncryptJWT, errors, jwtDecrypt } from "jose";
 import { z } from "zod";
 
 /**
- * Cookies chiffrés (JWE `dir` + `A256GCM`) : la session, et le flux OAuth en cours.
+ * Cookies de Pipliner : leurs noms et attributs, et le cookie chiffré (JWE `dir` + `A256GCM`) du flux
+ * de connexion OAuth en cours (`state` + vérificateur PKCE, 10 minutes).
  *
- * Le jeton GitHub ne quitte jamais le serveur autrement que dans ce cookie chiffré et HttpOnly : le
- * JavaScript de la page ne peut ni le lire ni le déchiffrer. Le claim `pur` empêche de présenter un
- * cookie de flux comme cookie de session (et inversement).
- * ÉCHEC FERMÉ : un cookie absent, falsifié, expiré ou mal formé vaut « pas de session ».
+ * Le cookie de SESSION ne porte qu'un identifiant aléatoire : la session et ses jetons GitHub
+ * (chiffrés) sont en base (services/sessions.ts). Le claim `pur` reste vérifié : un ancien cookie de
+ * session chiffré, ou tout autre JWE, n'est jamais accepté comme flux.
+ * ÉCHEC FERMÉ : un cookie de flux absent, falsifié, expiré ou mal formé vaut « pas de flux ».
  */
-export interface UserSession {
-  readonly userId: number;
-  readonly login: string;
-  readonly avatarUrl: string;
-  readonly accessToken: string;
-  /** Expiration, en secondes depuis l'époque Unix (UTC) : celle du jeton GitHub. */
-  readonly expiresAt: number;
-}
-
 export interface OAuthFlow {
   readonly state: string;
   readonly codeVerifier: string;
@@ -33,15 +25,6 @@ export interface CookiePolicy {
 
 /** Durée de vie du flux OAuth (cookie et jeton) : celle d'un code d'autorisation GitHub, 10 minutes. */
 export const FLOW_MAX_AGE_SECONDS = 600;
-
-const SessionClaims = z.object({
-  pur: z.literal("session"),
-  uid: z.number().int().positive(),
-  login: z.string().min(1),
-  avatar: z.string(),
-  tok: z.string().min(1),
-  exp: z.number().int(),
-});
 
 const FlowClaims = z.object({
   pur: z.literal("oauth"),
@@ -65,38 +48,9 @@ export function cookiePolicyFor(appOrigin: string): CookiePolicy {
   };
 }
 
-/** Clé de 256 bits dérivée du secret de configuration (SHA-256). */
+/** Clé de 256 bits du cookie de flux, dérivée de `SESSION_SECRET` (SHA-256). */
 export function deriveSessionKey(secret: string): Uint8Array {
   return new Uint8Array(createHash("sha256").update(secret, "utf8").digest());
-}
-
-export function sealSession(session: UserSession, key: Uint8Array): Promise<string> {
-  return new EncryptJWT({
-    pur: "session",
-    uid: session.userId,
-    login: session.login,
-    avatar: session.avatarUrl,
-    tok: session.accessToken,
-  })
-    .setProtectedHeader({ alg: "dir", enc: "A256GCM" })
-    .setIssuedAt()
-    .setExpirationTime(session.expiresAt)
-    .encrypt(key);
-}
-
-export async function openSession(
-  sealed: string | undefined,
-  key: Uint8Array,
-): Promise<UserSession | null> {
-  const claims = await decrypt(sealed, key, SessionClaims);
-  if (!claims) return null;
-  return {
-    userId: claims.uid,
-    login: claims.login,
-    avatarUrl: claims.avatar,
-    accessToken: claims.tok,
-    expiresAt: claims.exp,
-  };
 }
 
 export function sealOAuthFlow(flow: OAuthFlow, key: Uint8Array): Promise<string> {

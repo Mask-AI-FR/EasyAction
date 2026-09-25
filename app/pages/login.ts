@@ -5,6 +5,7 @@ import {
   LOGIN_ERROR_CODES,
   type LoginErrorCode,
 } from "../../domain/apiContract.ts";
+import { isSameOriginPath } from "../../domain/returnTo.ts";
 import { signInUrl } from "../services/api-client.ts";
 import { ensureSession } from "../stores/session-store.ts";
 import { sharedSheet } from "../styles/shared-sheet.ts";
@@ -47,7 +48,7 @@ const CHECK_ICON = html`<svg viewBox="0 0 16 16" fill="none" aria-hidden="true" 
 /** Page où aller après connexion : celle que la garde a notée, si elle est de notre origine. */
 function requestedReturnTo(): string {
   const candidate = queryParam("returnTo");
-  return candidate && /^\/(?![/\\])/.test(candidate) ? candidate : "/orgs";
+  return candidate && isSameOriginPath(candidate) ? candidate : "/orgs";
 }
 
 function signInError(): LoginErrorCode | null {

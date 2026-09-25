@@ -1,24 +1,22 @@
 /**
  * Environnement des tests, posé AVANT tout import de `server/config/env.ts`, qui lit
  * l'environnement au chargement (échec fermé au démarrage). À importer en PREMIER dans chaque fichier
- * de test qui charge du code serveur. Valeurs fictives uniquement ; les adresses GitHub pointent vers
- * un port fermé, pour qu'un appel réseau imprévu échoue tout de suite au lieu de sortir.
+ * de test qui charge du code serveur. Valeurs fictives uniquement. La connexion à GitHub n'est plus
+ * une variable d'environnement : c'est un réglage du site, posé par `support/testDatabase.ts`.
  */
 Object.assign(process.env, {
   HOST: "127.0.0.1",
   PORT: "8094",
   APP_ORIGIN: "http://127.0.0.1:8094",
   SESSION_SECRET: "not-a-real-secret-only-for-tests-000000",
-  GITHUB_WEB_URL: "http://127.0.0.1:1",
-  GITHUB_API_URL: "http://127.0.0.1:1",
-  GITHUB_APP_CLIENT_ID: "Iv1.not-a-real-client",
-  GITHUB_APP_CLIENT_SECRET: "not-a-real-client-secret",
-  GITHUB_TIMEOUT_MS: "2000",
-  REPOS_MAX: "1000",
-  BRANCHES_MAX: "300",
-  ACTIVE_BRANCH_DAYS: "90",
-  DISPATCH_MAX_TARGETS: "50",
-  DISPATCH_CONCURRENCY: "3",
-  RUN_POLL_MIN_SECONDS: "10",
-  RUN_TRACK_MAX_MINUTES: "30",
+  DATA_ENCRYPTION_KEY: "not-a-real-data-key-only-for-tests-00000",
+  // Jamais ouvert par les tests : chaque test passe sa propre base en mémoire (support/testDatabase.ts).
+  DATABASE_PATH: "./data/never-opened-by-tests.sqlite",
+  HTTP_IDLE_TIMEOUT_SECONDS: "240",
+  SESSION_MAX_DAYS: "30",
+  SESSIONS_PER_USER_MAX: "5",
+  AUDIT_RETENTION_DAYS: "365",
+  TWO_FACTOR_EVERY_HOURS: "24",
+  TWO_FACTOR_MAX_ATTEMPTS: "5",
+  TWO_FACTOR_LOCK_MINUTES: "15",
 });

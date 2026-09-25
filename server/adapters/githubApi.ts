@@ -96,7 +96,10 @@ export async function request(
     if (err instanceof DOMException && err.name === "TimeoutError") {
       throw new GitHubApiError("timeout");
     }
-    if (err instanceof TypeError) throw new GitHubApiError("upstream");
+    // Réseau injoignable : Bun lève une `Error` à `code` texte (`ConnectionRefused`…), les navigateurs
+    // un `TypeError`. Sans ce cas, GitHub injoignable devenait un 500 au lieu d'un 502 `upstream`.
+    const code: unknown = err instanceof Error ? (err as { code?: unknown }).code : undefined;
+    if (err instanceof TypeError || typeof code === "string") throw new GitHubApiError("upstream");
     throw err;
   }
 }

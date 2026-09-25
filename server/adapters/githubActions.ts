@@ -3,6 +3,7 @@ import type {
   DispatchRejection,
   DispatchTarget,
 } from "../../domain/dispatchContract.ts";
+import type { StatsRun } from "../../domain/dashboardStats.ts";
 import type {
   RunConclusion,
   RunStatus,
@@ -17,6 +18,7 @@ import {
   RunsPage,
   WorkflowsPage,
 } from "../schemas/github.schema.ts";
+import { CreatedRunsPage } from "../schemas/githubStats.schema.ts";
 import {
   failureOf,
   GitHubApiError,
@@ -65,6 +67,15 @@ const RUN_CONCLUSIONS: readonly RunConclusion[] = [
 const repoBase = (repo: RepoPath): string =>
   `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}`;
 
+/** Statut et conclusion connus de Pipliner : un statut inconnu devient `pending`, une conclusion inconnue `neutral`. */
+function stateOf(run: { readonly status: string | null; readonly conclusion: string | null }): Pick<RunSummary, "status" | "conclusion"> {
+  return {
+    status: RUN_STATUSES.find((status) => status === run.status) ?? "pending",
+    conclusion:
+      run.conclusion === null ? null : (RUN_CONCLUSIONS.find((known) => known === run.conclusion) ?? "neutral"),
+  };
+}
+
 /** Tous les workflows du dépôt (pages de 100). Un état inconnu compte comme désactivé. */
 export async function listWorkflows(
   github: GitHubSettings,
@@ -103,14 +114,57 @@ export async function listRecentRuns(
     workflowId: run.workflow_id,
     branch: run.head_branch,
     event: run.event,
-    status: RUN_STATUSES.find((status) => status === run.status) ?? "pending",
-    conclusion:
-      run.conclusion === null ? null : (RUN_CONCLUSIONS.find((known) => known === run.conclusion) ?? "neutral"),
+    ...stateOf(run),
     htmlUrl: run.html_url,
     createdAt: run.created_at,
     startedAt: run.run_started_at ?? null,
     updatedAt: run.updated_at,
   }));
+}
+
+/** Une page d'exécutions d'une période, avec le total annoncé par GitHub (pour savoir si tout a été lu). */
+export interface CreatedRuns {
+  readonly runs: StatsRun[];
+  readonly totalCount: number;
+}
+
+/**
+ * Exécutions créées entre deux instants ISO 8601 (inclus), page par page (100) : l'appelant s'arrête
+ * quand il veut (plafond, limite de temps). GitHub ne rend pas plus de 1 000 exécutions d'une liste
+ * filtrée. Toutes sont gardées (poussées, planifiées, demandes de fusion, lancements) ;
+ * `exclude_pull_requests` n'allège que la réponse.
+ */
+export async function* runsCreatedBetween(
+  github: GitHubSettings,
+  token: string,
+  repo: RepoPath,
+  range: { readonly from: string; readonly to: string },
+): AsyncGenerator<CreatedRuns> {
+  // Syntaxe de recherche de GitHub : instants à la seconde, `<de>..<à>`.
+  const stamp = (iso: string) => iso.replace(/\.\d{3}Z$/, "Z");
+  const query = new URLSearchParams({
+    per_page: "100",
+    exclude_pull_requests: "true",
+    created: `${stamp(range.from)}..${stamp(range.to)}`,
+  });
+  for await (const body of pages(github, token, `${repoBase(repo)}/actions/runs?${query}`)) {
+    const page = parsed(CreatedRunsPage, body);
+    yield {
+      totalCount: page.total_count,
+      runs: page.workflow_runs.map((run) => ({
+        workflowId: run.workflow_id,
+        workflowName: run.name || run.path || `Workflow ${run.workflow_id}`,
+        workflowPath: run.path ?? "",
+        branch: run.head_branch,
+        event: run.event,
+        ...stateOf(run),
+        htmlUrl: run.html_url,
+        createdAt: run.created_at,
+        startedAt: run.run_started_at ?? null,
+        updatedAt: run.updated_at,
+      })),
+    };
+  }
 }
 
 /**

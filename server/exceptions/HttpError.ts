@@ -11,6 +11,8 @@ export class HttpError extends Error {
     readonly status: ContentfulStatusCode,
     readonly code: ApiErrorCode,
     message: string,
+    /** Secondes à attendre avant de réessayer (codes bloqués) : corps et en-tête `Retry-After`. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "HttpError";

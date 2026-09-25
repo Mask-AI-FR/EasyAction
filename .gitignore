@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Base SQLite (sessions, jetons GitHub chiffrés) : jamais dans git.
+data/
 .env
 .env.*
 !.env.example

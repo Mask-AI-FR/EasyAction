@@ -8,6 +8,13 @@
     "build": "bun scripts/buildApp.ts",
     "start": "bun server/index.ts",
     "desktop": "bun scripts/desktop.ts",
+    "db:migrate": "bun scripts/db.ts migrate",
+    "db:rollback": "bun scripts/db.ts rollback",
+    "db:status": "bun scripts/db.ts status",
+    "users:promote": "bun scripts/users.ts promote",
+    "users:demote": "bun scripts/users.ts demote",
+    "users:reset-two-factor": "bun scripts/users.ts reset-two-factor",
+    "settings:import-env": "bun scripts/settings.ts import-env",
     "typecheck": "bun --bun tsc --noEmit -p . && bun --bun tsc --noEmit -p app",
     "test": "bun test"
   },
@@ -18,11 +25,13 @@
     "@tinijs/core": "0.21.1",
     "@tinijs/router": "0.21.0",
     "@tinijs/store": "0.21.0",
+    "chart.js": "4.5.1",
     "clsx": "2.1.1",
     "hono": "4.13.9",
     "jose": "6.2.12",
     "lit": "3.3.3",
     "tailwind-merge": "3.6.0",
+    "uqr": "0.1.3",
     "zod": "4.6.5"
   },
   "devDependencies": {

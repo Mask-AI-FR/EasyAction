@@ -11,6 +11,9 @@ export const TokenGranted = z.object({
   token_type: z.string(),
   /** Absent si l'app a désactivé l'expiration des jetons utilisateur. */
   expires_in: z.number().int().positive().optional(),
+  /** Jeton de rafraîchissement (6 mois) et sa durée : présents quand les jetons expirent. */
+  refresh_token: z.string().min(1).optional(),
+  refresh_token_expires_in: z.number().int().positive().optional(),
 });
 
 /** GitHub répond HTTP 200 avec un champ `error` quand l'échange échoue (ex. `bad_verification_code`). */
@@ -76,6 +79,8 @@ export const BranchesQueryResult = z.object({
         .object({
           defaultBranchRef: z.object({ name: z.string().min(1) }).nullable(),
           refs: z.object({
+            /** Nombre exact de branches, même au-delà de celles lues. */
+            totalCount: z.number().int().nonnegative(),
             pageInfo: z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullable() }),
             nodes: z.array(
               z.object({

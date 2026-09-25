@@ -37,8 +37,22 @@ repository with its branches and workflows, plus the live status of each one. Yo
 
 ## Features
 
-- **Sign in with GitHub.** It uses a GitHub App with a PKCE flow. Your GitHub token stays on the
-  server, inside an encrypted cookie. The browser never sees it.
+- **Sign in with GitHub, stay signed in.** It uses a GitHub App with a PKCE flow. You stay signed in
+  for up to 30 days (configurable): your GitHub tokens are kept encrypted on the server and renewed
+  automatically. The browser never sees them.
+- **Daily code.** Once a day, each browser asks for the 6-digit code of an authenticator app (Google
+  Authenticator, Authy, 2FAS, 1Password…), set up with a QR code at your first sign-in. Ten one-time
+  recovery codes cover a lost phone.
+- **Your account.** See every browser where you are signed in, sign the others out, make new recovery
+  codes, change your authenticator app, download your data or delete it. Sign-ins and security actions
+  are kept in a history.
+- **Settings in the website, for admins.** Change the GitHub connection (addresses, GitHub App client
+  ID and secret) and the limits without editing files. Manage users: roles, authenticator reset,
+  sign-out, deletion. Read the security history. Sensitive changes ask for a current 6-digit code.
+- **Statistics dashboard.** Each organization opens on its dashboard: people who committed on any
+  branch, successful and failed runs, success rate, average duration and branches, compared with the
+  previous period; runs over time, rankings by repository, top failing workflows and recent failures.
+  7, 30 or 90 days. Every chart has a table view, and the page names anything it could not read.
 - **Organization overview.** See every repository the app can access. Search and filter them by
   visibility, language and archived state, and sort them. The filters are saved in the address, so
   you can share a link to a filtered view.
@@ -53,7 +67,7 @@ repository with its branches and workflows, plus the live status of each one. Yo
   confirmed, they show "Status unknown" and a link to GitHub. The app never guesses a result.
 - **Desktop window.** `bun run desktop` opens EasyActions in its own window. You can also install it
   from Brave, Chrome or Edge.
-- **GitHub Enterprise Server** is supported through two settings.
+- **GitHub Enterprise Server** and GHE.com are supported through two settings.
 
 ## How it works
 
@@ -68,13 +82,14 @@ Browser ── same origin ──▶ Bun + Hono
 | Folder | Contents |
 |---|---|
 | `app/` | The web app: TiniJS on Lit, Tailwind CSS v4, MASKAI design tokens with an EasyActions brand layer |
-| `server/` | The Hono server: auth, API routes, GitHub adapters, config, logging |
-| `domain/` | Framework-free logic and types shared by both sides (API contract, dispatch plan, polling policy) |
-| `scripts/` | Production build and the desktop launcher |
+| `server/` | The Hono server: auth, sessions, API routes, GitHub adapters, SQLite database (schema, repositories), config, logging |
+| `domain/` | Framework-free logic and types shared by both sides (API contract, dispatch plan, polling policy, dashboard statistics) |
+| `scripts/` | Production build, database, settings and user commands, and the desktop launcher |
 | `tests/` | Unit and integration tests. GitHub is replaced by a real local fake HTTP server |
 
 Every design choice, the full list of routes, and the behaviour on each kind of failure are described
-in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**; what is stored and how it is protected, in
+**[docs/SECURITY.md](docs/SECURITY.md)**.
 
 ## Getting started
 
@@ -107,14 +122,26 @@ organization.
 bun install --frozen-lockfile
 cp .env.example .env
 openssl rand -base64 32
+openssl rand -base64 32
 ```
 
 Open `.env` and replace every `<TO_PROVIDE>`:
 
-- `SESSION_SECRET`: the output of the `openssl` command
+- `SESSION_SECRET`: the first output of the `openssl` command
+- `DATA_ENCRYPTION_KEY`: the second output (a different value; keep it safe — losing it signs
+  everybody out)
 - `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`: your app's values
 
 `.env` is git-ignored. Never commit it.
+
+Then create the database (run `db:migrate` again after every upgrade, with the server stopped), and
+copy the GitHub connection and the limits from `.env` into it. This is done once; after that,
+admins change them on the Settings page:
+
+```bash
+bun run db:migrate
+bun run settings:import-env
+```
 
 ### 3. Run
 
@@ -137,33 +164,77 @@ Desktop window. This reuses a running server, or builds and starts one in the ba
 bun run desktop
 ```
 
+### 4. Become the first admin
+
+Sign in once in the browser (and set up your authenticator app), then run this in the repository
+folder, with your GitHub login instead of `your-github-login`:
+
+```bash
+bun run users:promote your-github-login
+```
+
+Reload the page: a **Settings** link appears in the header. Other admins can then be made from the
+Users page.
+
 ## Configuration
 
-Every variable is **required**. If one is missing, still set to `<TO_PROVIDE>`, or invalid, the server
-does not start and lists the names of the problem variables (never their values). `.env.example`
-documents each one.
+Configuration has two places:
+
+- **`.env`, for the server and security.** Every variable in the table below is **required**. If one
+  is missing, still set to `<TO_PROVIDE>`, or invalid, the server does not start and lists the names
+  of the problem variables (never their values). `.env.example` documents each one.
+- **The Settings page, for the website settings** (GitHub connection and limits, second table). They
+  are stored in the database. The first time, `bun run settings:import-env` copies them from `.env`;
+  after that, `.env`'s copies are ignored.
 
 | Variable | Purpose | Default in template |
 |---|---|---|
 | `HOST` | Interface to bind (never `0.0.0.0` on a host) | `127.0.0.1` |
 | `PORT` | Port for the app and its API | `8094` |
 | `APP_ORIGIN` | Exact public origin: builds the callback URL and is checked on every POST | `http://127.0.0.1:8094` |
-| `SESSION_SECRET` | Cookie encryption secret, at least 32 characters | — |
-| `GITHUB_WEB_URL` / `GITHUB_API_URL` | github.com, or your GitHub Enterprise Server | github.com |
-| `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | GitHub App credentials | — |
-| `GITHUB_TIMEOUT_MS` | Timeout for every GitHub call (1000–60000) | `10000` |
-| `REPOS_MAX` | Max repositories read per organization | `1000` |
-| `BRANCHES_MAX` | Max branches read per repository | `300` |
-| `ACTIVE_BRANCH_DAYS` | Branches with no commit for longer than this are listed as "Stale" | `90` |
-| `DISPATCH_MAX_TARGETS` | Max pipelines one bulk run may start | `50` |
-| `DISPATCH_CONCURRENCY` | Dispatches sent to GitHub at the same time | `3` |
-| `RUN_POLL_MIN_SECONDS` | Minimum interval between two live-status checks | `10` |
-| `RUN_TRACK_MAX_MINUTES` | How long started runs are followed | `30` |
+| `SESSION_SECRET` | Encrypts the short sign-in cookie, at least 32 characters | — |
+| `DATA_ENCRYPTION_KEY` | Encrypts the GitHub tokens in the database, at least 32 characters | — |
+| `DATABASE_PATH` | SQLite file, created by `bun run db:migrate` | `./data/pipliner.sqlite` |
+| `HTTP_IDLE_TIMEOUT_SECONDS` | Seconds a connection may stay silent (30–255) | `240` |
+| `SESSION_MAX_DAYS` | Days a browser stays signed in (1–180) | `30` |
+| `SESSIONS_PER_USER_MAX` | Browsers one person can be signed in on (1–10) | `5` |
+| `AUDIT_RETENTION_DAYS` | Days the sign-in and security history is kept (30–3650) | `365` |
+| `TWO_FACTOR_EVERY_HOURS` | Hours an accepted 6-digit code stays valid for a browser (1–168) | `24` |
+| `TWO_FACTOR_MAX_ATTEMPTS` | Wrong codes before a lock (3–20) | `5` |
+| `TWO_FACTOR_LOCK_MINUTES` | First lock, doubled at each next one, 24 h at most (1–1440) | `15` |
+
+Website settings (Settings page; the `.env` name is used only by `bun run settings:import-env`):
+
+| Setting (`.env` name) | Purpose | Default |
+|---|---|---|
+| GitHub web and API addresses (`GITHUB_WEB_URL`, `GITHUB_API_URL`) | github.com, GHE.com or your GitHub Enterprise Server; the API address must match the web address | — |
+| GitHub App client ID and secret (`GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`) | The app EasyActions signs in with; the secret is stored encrypted and never shown | — |
+| GitHub timeout (`GITHUB_TIMEOUT_MS`) | Timeout for every GitHub call (1000–60000 ms) | `10000` |
+| Repositories read per organization (`REPOS_MAX`) | Above it, the list says it is truncated | `1000` |
+| Branches read per repository (`BRANCHES_MAX`) | Max branches listed | `300` |
+| Days before a branch is stale (`ACTIVE_BRANCH_DAYS`) | Older branches are listed as "Stale" | `90` |
+| Pipelines per bulk run (`DISPATCH_MAX_TARGETS`) | Max pipelines one bulk run may start | `50` |
+| Dispatches sent at the same time (`DISPATCH_CONCURRENCY`) | Parallel requests to GitHub | `3` |
+| Live status: minimum seconds between checks (`RUN_POLL_MIN_SECONDS`) | Polling floor | `10` |
+| Live status: minutes runs are followed (`RUN_TRACK_MAX_MINUTES`) | Then "Status unknown" | `30` |
+| Dashboard: repositories read | The most recently pushed first (1–500) | `50` |
+| Dashboard: runs read per repository and period | GitHub lists 1,000 at most (100–1000) | `500` |
+| Dashboard: commits read per repository | All branches, both periods (100–10000) | `2000` |
+| Dashboard: seconds a result is reused | `0` reads GitHub at every visit (0–3600) | `300` |
+| Dashboard: seconds allowed to read GitHub | Repositories not read in time are named (10–200) | `60` |
+
+Changing the GitHub address or client ID signs everybody out. If a wrong value locks everybody out,
+fix `.env`, stop the server and run `bun run settings:import-env --replace`.
 
 ## Security
 
-- **No server-side storage.** The only data kept is in an encrypted session cookie in your own browser.
-  Signing out clears it and revokes the GitHub token. Otherwise it expires after 8 hours.
+- **Sessions in a local database.** The cookie holds only a random id; the session and its GitHub
+  tokens live in the SQLite file, the tokens encrypted (AES-256-GCM). Signing out closes the session
+  and revokes the token; the Account page signs out other browsers, exports or deletes your data.
+  Details: [docs/SECURITY.md](docs/SECURITY.md).
+- **Admins are checked by the server.** Every admin route answers `403` to other users. Changing the
+  GitHub connection, a role, someone's authenticator app or deleting someone needs a current 6-digit
+  code, and the history records who did it.
 - **CSRF protection.** Every POST must carry the app's exact `Origin`, and cookies are `SameSite=Lax`.
 - **Strict headers.** Every response sets a CSP and `frame-ancestors 'none'`, so the "Run" button
   cannot be embedded in another site (clickjacking).
@@ -190,6 +261,13 @@ bun install --frozen-lockfile && bun run typecheck && bun test && bun run build 
 | `bun run build` | Builds the web app into `dist/app` (`scripts/buildApp.ts`) |
 | `bun run start` | Production server (`server/index.ts`) |
 | `bun run desktop` | Opens EasyActions in its own window (`scripts/desktop.ts`) |
+| `bun run db:migrate` | Creates or upgrades the SQLite database (server stopped) |
+| `bun run db:status` | Tells whether the database is ready |
+| `bun run db:rollback` | Removes the last migration (`--yes` when it deletes data) |
+| `bun run settings:import-env` | Copies the website settings from `.env` into the database (once); `--replace` overwrites them |
+| `bun run users:promote <login>` | Makes someone an admin (they must have signed in once) |
+| `bun run users:demote <login>` | Removes the admin role (never from the last admin) |
+| `bun run users:reset-two-factor <login>` | Removes someone's authenticator app (lost phone); `--all` for everybody |
 | `bun run typecheck` | Strict TypeScript for the server and the app |
 | `bun test` | Unit and integration tests |
 
@@ -205,7 +283,8 @@ The tests check the design rules. The full rules are in [docs/ARCHITECTURE.md](d
 
 ## Roadmap
 
-- **M5: statistics** (`vstatistique`), pipeline statistics per organization. Planned, not built yet.
+The planned milestones (M0–M8) are delivered. How the dashboard counts is described in
+**[docs/DASHBOARD.md](docs/DASHBOARD.md)**.
 
 ## Brand
 

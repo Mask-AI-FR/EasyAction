@@ -5,7 +5,7 @@ import { GitHubApiError } from "../../server/adapters/githubApi.ts";
 import { listBranches, listInstallationRepos, listOrgInstallations } from "../../server/adapters/githubRepos.ts";
 
 const github = new FakeGitHub();
-const settings = github.env().github;
+const settings = github.settings();
 const TOKEN = "ghu_not-a-real-token";
 
 afterAll(() => github.stop());
@@ -176,7 +176,7 @@ describe("branches d'un dépôt (GraphQL)", () => {
         data: {
           repository: {
             defaultBranchRef: { name: "main" },
-            refs: { pageInfo: { hasNextPage, endCursor: hasNextPage ? String(index + 1) : null }, nodes },
+            refs: { totalCount: pages.flat().length, pageInfo: { hasNextPage, endCursor: hasNextPage ? String(index + 1) : null }, nodes },
           },
         },
       });
@@ -195,6 +195,7 @@ describe("branches d'un dépôt (GraphQL)", () => {
     expect(result).toEqual({
       defaultBranch: "main",
       truncated: false,
+      totalCount: 3,
       branches: [
         { name: "main", committedAt: old, active: true },
         { name: "zeta", committedAt: recent, active: true },
@@ -217,6 +218,8 @@ describe("branches d'un dépôt (GraphQL)", () => {
     const result = await listBranches(settings, TOKEN, sandbox, { max: 2, activeDays: 90 });
     expect(result.truncated).toBe(true);
     expect(result.branches).toHaveLength(2);
+    // Le total exact vient de GitHub, même au-delà du plafond lu.
+    expect(result.totalCount).toBe(3);
     expect(github.callsTo("POST", "/graphql")).toHaveLength(1);
   });
 
@@ -271,5 +274,11 @@ describe("échecs GitHub traduits en codes stables", () => {
     });
     const failure = await failureOf(listOrgInstallations({ ...settings, timeoutMs: 50 }, TOKEN));
     expect(failure.code).toBe("timeout");
+  });
+
+  test("GitHub injoignable (port fermé) : échec `upstream`, pas une erreur interne", async () => {
+    // Régression : Bun lève une `Error` à code `ConnectionRefused`, que seul `TypeError` attrapait.
+    const unreachable = { ...settings, apiUrl: "http://127.0.0.1:1" };
+    expect((await failureOf(listOrgInstallations(unreachable, TOKEN))).code).toBe("upstream");
   });
 });

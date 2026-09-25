@@ -40,7 +40,10 @@ const GITHUB_FAILURES: Record<
  */
 export function renderError(err: Error, c: Context): Response {
   if (err instanceof HttpError) {
-    return c.json(errorBody(err.code, err.message), err.status);
+    const { retryAfterSeconds } = err;
+    if (retryAfterSeconds === undefined) return c.json(errorBody(err.code, err.message), err.status);
+    c.header("Retry-After", String(retryAfterSeconds));
+    return c.json(errorBody(err.code, err.message, { retryAfterSeconds }), err.status);
   }
   if (err instanceof GitHubApiError) return renderGitHubFailure(err, c);
   if (err instanceof HTTPException) return err.getResponse();

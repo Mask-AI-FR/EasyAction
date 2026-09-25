@@ -63,7 +63,7 @@ export class AppPageOrgs extends TiniComponent {
   private renderOrg(org: OrgSummary) {
     return html`
       <a
-        href=${`/orgs/${encodeURIComponent(org.login)}`}
+        href=${`/orgs/${encodeURIComponent(org.login)}/dashboard`}
         class="group flex items-center gap-3 rounded-lg border border-border bg-surface p-4 shadow-card transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)] hover:border-primary hover:bg-surface-hover focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         <img

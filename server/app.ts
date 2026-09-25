@@ -1,26 +1,42 @@
+import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
-import { secureHeaders } from "hono/secure-headers";
+import { secureHeaders, type ContentSecurityPolicyOptionHandler } from "hono/secure-headers";
 import { cookiePolicyFor, deriveSessionKey } from "./auth/sessionCookie.ts";
 import type { PiplinerEnv } from "./config/env.ts";
 import { renderError, renderNotFound } from "./exceptions/errorHandler.ts";
 import { apiRouter } from "./routers/api.ts";
 import { authRouter, type AuthDeps } from "./routers/auth.ts";
 import { healthRouter } from "./routers/health.ts";
+import { deriveDataKey, deriveRecoveryCodeKey } from "./security/dataCipher.ts";
+import { DashboardCollector } from "./services/dashboardCollector.ts";
+import { GitHubTokens } from "./services/githubTokens.ts";
+import type { SessionStore } from "./services/sessions.ts";
+import { readSettings, SettingsMissingError, type EffectiveSettings } from "./services/settings.ts";
 
 /**
  * Application Hono sans effet de bord au chargement, testable par `app.request()` (motif des services
- * Org/Billing). La configuration est passée en paramètre : les tests fournissent la leur (faux GitHub).
- * Les points d'entrée y ajoutent le service de la SPA (`index.ts`) ou le délèguent à Bun (`dev.ts`).
+ * Org/Billing). Configuration et base sont passées en paramètre : les tests fournissent les leurs
+ * (faux GitHub, base en mémoire). Les points d'entrée y ajoutent le service de la SPA (`index.ts`) ou
+ * le délèguent à Bun (`dev.ts`).
  */
-export function buildApp(env: PiplinerEnv): Hono {
+export function buildApp(env: PiplinerEnv, db: Database): Hono {
+  const dataKey = deriveDataKey(env.dataEncryptionKey);
+  const sessions: SessionStore = { db, dataKey, policy: env.sessions, auditRetentionDays: env.auditRetentionDays };
+  // Réglages du site relus à chaque appel (services/settings.ts) : une modification vaut aussitôt.
+  const settings = (): EffectiveSettings => readSettings(db, dataKey);
   const deps: AuthDeps = {
     env,
     key: deriveSessionKey(env.sessionSecret),
     cookies: cookiePolicyFor(env.appOrigin),
+    sessions,
+    tokens: new GitHubTokens(sessions, () => settings().github),
+    twoFactor: { sessions, recoveryKey: deriveRecoveryCodeKey(env.dataEncryptionKey), policy: env.twoFactor },
+    settings,
+    dashboard: new DashboardCollector(),
   };
   const app = new Hono();
-  app.use("*", secureHeaders(securityHeadersFor(env)));
+  app.use("*", secureHeaders(securityHeadersFor(settings)));
   app.route("/", healthRouter);
   app.route("/auth", authRouter(deps));
   app.route("/api", apiRouter(deps));
@@ -29,6 +45,19 @@ export function buildApp(env: PiplinerEnv): Hono {
   app.all("/auth/*", renderNotFound);
   app.onError(renderError);
   return app;
+}
+
+/**
+ * Écoute de `Bun.serve`, commune à `index.ts` et `dev.ts`. `idleTimeout` : sans lui, Bun coupe une
+ * connexion restée 10 s sans rien envoyer — un lot de lancements qui attend GitHub était coupé et le
+ * navigateur n'en voyait jamais le résultat (constat de la revue du 25 septembre 2026).
+ */
+export function listenOptions(env: PiplinerEnv): {
+  readonly hostname: string;
+  readonly port: number;
+  readonly idleTimeout: number;
+} {
+  return { hostname: env.host, port: env.port, idleTimeout: env.httpIdleTimeoutSeconds };
 }
 
 /** Page d'entrée : toujours revalidée, sinon un navigateur garde l'ancienne après un déploiement. */
@@ -73,9 +102,19 @@ export function serveBuiltApp(app: Hono, distDir: string): void {
  * - Pas de `upgrade-insecure-requests` : il casserait l'usage local en http://127.0.0.1.
  * - `font-src data:` : le bundler CSS de Bun incruste les polices en `data:` sans option pour l'éviter
  *   (scripts/buildApp.ts) ; ces données viennent de notre propre CSS, jamais d'une saisie utilisateur.
- * - `img-src` : les avatars GitHub, et rien d'autre venant d'ailleurs.
+ * - `img-src` : les avatars GitHub, et rien d'autre venant d'ailleurs. Calculé à chaque réponse : la
+ *   connexion à GitHub se change sur la page Settings. ÉCHEC FERMÉ : réglages illisibles → aucune
+ *   image extérieure.
  */
-function securityHeadersFor(env: PiplinerEnv) {
+function securityHeadersFor(settings: () => EffectiveSettings) {
+  const avatars: ContentSecurityPolicyOptionHandler = () => {
+    try {
+      return avatarSources(settings().github.webUrl).join(" ");
+    } catch (err) {
+      if (!(err instanceof SettingsMissingError)) throw err;
+      return "'self'";
+    }
+  };
   return {
     contentSecurityPolicy: {
       defaultSrc: ["'self'"],
@@ -83,7 +122,7 @@ function securityHeadersFor(env: PiplinerEnv) {
       fontSrc: ["'self'", "data:"],
       formAction: ["'self'"],
       frameAncestors: ["'none'"],
-      imgSrc: ["'self'", ...avatarSources(env.github.webUrl)],
+      imgSrc: ["'self'", avatars],
       objectSrc: ["'none'"],
     },
     xFrameOptions: "DENY",

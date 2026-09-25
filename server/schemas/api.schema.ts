@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSameOriginPath } from "../../domain/returnTo.ts";
 
 /**
  * Entrées HTTP de Pipliner, validées à la frontière (CLAUDE.md §3.6).
@@ -7,14 +8,8 @@ import { z } from "zod";
 /** Page où revenir après connexion, par défaut. */
 export const DEFAULT_RETURN_TO = "/orgs";
 
-/**
- * Un chemin de NOTRE origine uniquement : commence par un seul `/`, sans `//`, sans barre oblique
- * inverse ni espace — sinon une redirection ouverte vers un autre site deviendrait possible.
- */
-const SameOriginPath = z
-  .string()
-  .max(512)
-  .regex(/^\/(?![/\\])[^\\\s]*$/);
+/** Un chemin de NOTRE origine uniquement (règle unique : `domain/returnTo.ts`). */
+const SameOriginPath = z.string().refine(isSameOriginPath);
 
 export function safeReturnTo(candidate: string | undefined): string {
   const parsed = SameOriginPath.safeParse(candidate);

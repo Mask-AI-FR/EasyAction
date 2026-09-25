@@ -1,13 +1,14 @@
 import "../support/testEnv.ts";
 import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { FakeGitHub } from "../support/fakeGithub.ts";
+import { signInDirectly } from "../support/sessions.ts";
+import { TEST_GITHUB, testDatabase } from "../support/testDatabase.ts";
 import { buildApp } from "../../server/app.ts";
-import { deriveSessionKey, sealSession } from "../../server/auth/sessionCookie.ts";
 import { parseEnv } from "../../server/config/env.ts";
 import type { ApiErrorBody, BranchesBody, ReposBody, SessionBody, WorkflowsBody } from "../../domain/apiContract.ts";
 import type { DispatchBody, RunsBody } from "../../domain/dispatchContract.ts";
 
-const app = () => buildApp(parseEnv(process.env));
+const app = () => buildApp(parseEnv(process.env), testDatabase());
 const github = new FakeGitHub();
 
 afterEach(() => {
@@ -24,24 +25,15 @@ interface Call {
   readonly json?: unknown;
 }
 
-/** Requête d'un utilisateur connecté, contre le faux GitHub. */
+/** Requête d'un utilisateur connecté (session ouverte en base), contre le faux GitHub. */
 async function signedIn(path: string, call: Call = {}): Promise<Response> {
   const env = github.env();
-  const sealed = await sealSession(
-    {
-      userId: 42,
-      login: "octo-test",
-      avatarUrl: "https://avatars.githubusercontent.com/u/42?v=4",
-      accessToken: "ghu_not-a-real-token",
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    },
-    deriveSessionKey(env.sessionSecret),
-  );
-  const headers: Record<string, string> = { Cookie: `pipliner_session=${sealed}` };
+  const db = github.database();
+  const headers: Record<string, string> = { Cookie: `pipliner_session=${signInDirectly(env, db)}` };
   if (call.origin) headers.Origin = call.origin;
   if (call.json !== undefined) headers["Content-Type"] = "application/json";
   const body = call.json === undefined ? undefined : JSON.stringify(call.json);
-  return buildApp(env).request(path, { method: call.method ?? "GET", headers, body });
+  return buildApp(env, db).request(path, { method: call.method ?? "GET", headers, body });
 }
 
 function installations(): void {
@@ -76,7 +68,7 @@ describe("application HTTP", () => {
 
   test("la CSP n'autorise d'autres images que les avatars GitHub (github.com ou GHES)", async () => {
     const cspFor = async (webUrl: string) => {
-      const instance = buildApp(parseEnv({ ...process.env, GITHUB_WEB_URL: webUrl }));
+      const instance = buildApp(parseEnv(process.env), testDatabase({ ...TEST_GITHUB, webUrl }));
       const response = await instance.request("/health");
       return response.headers.get("content-security-policy") ?? "";
     };
@@ -257,6 +249,7 @@ describe("branches, workflows, exécutions et lancement (API)", () => {
           repository: {
             defaultBranchRef: { name: "main" },
             refs: {
+              totalCount: 2,
               pageInfo: { hasNextPage: false, endCursor: null },
               nodes: [
                 { name: "feat/x", target: { committedDate: new Date().toISOString() } },
@@ -274,6 +267,8 @@ describe("branches, workflows, exécutions et lancement (API)", () => {
       ["main", true],
       ["feat/x", true],
     ]);
+    // Forme publique inchangée : le total de branches du tableau de bord n'y apparaît pas.
+    expect(Object.keys(body).sort()).toEqual(["branches", "defaultBranch", "truncated"]);
   });
 
   test("GET …/workflows?branch= : chaque workflow avec sa dernière exécution sur cette branche", async () => {

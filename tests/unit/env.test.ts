@@ -7,18 +7,15 @@ const VALID = {
   PORT: "8094",
   APP_ORIGIN: "http://127.0.0.1:8094",
   SESSION_SECRET: "not-a-real-secret-only-for-tests-000000",
-  GITHUB_WEB_URL: "https://github.com/",
-  GITHUB_API_URL: "https://api.github.com",
-  GITHUB_APP_CLIENT_ID: "Iv1.not-a-real-client",
-  GITHUB_APP_CLIENT_SECRET: "not-a-real-client-secret",
-  GITHUB_TIMEOUT_MS: "10000",
-  REPOS_MAX: "1000",
-  BRANCHES_MAX: "300",
-  ACTIVE_BRANCH_DAYS: "90",
-  DISPATCH_MAX_TARGETS: "50",
-  DISPATCH_CONCURRENCY: "3",
-  RUN_POLL_MIN_SECONDS: "10",
-  RUN_TRACK_MAX_MINUTES: "30",
+  DATA_ENCRYPTION_KEY: "not-a-real-data-key-only-for-tests-00000",
+  DATABASE_PATH: "./data/pipliner.sqlite",
+  HTTP_IDLE_TIMEOUT_SECONDS: "240",
+  SESSION_MAX_DAYS: "30",
+  SESSIONS_PER_USER_MAX: "5",
+  AUDIT_RETENTION_DAYS: "365",
+  TWO_FACTOR_EVERY_HOURS: "24",
+  TWO_FACTOR_MAX_ATTEMPTS: "5",
+  TWO_FACTOR_LOCK_MINUTES: "15",
 };
 
 function failureOf(source: Record<string, string>): string {
@@ -40,14 +37,15 @@ describe("parseEnv", () => {
     expect(() => parseEnv({})).toThrow(/sans \.env encore : copiez \.env\.example vers \.env/);
   });
 
-  test("refuse un plafond de dépôts nul", () => {
-    expect(failureOf({ ...VALID, REPOS_MAX: "0" })).toContain("invalide(s) : REPOS_MAX");
+  test("la connexion à GitHub et les plafonds ne sont plus exigés au démarrage : ce sont des réglages du site", () => {
+    expect(failureOf(VALID)).toBe("");
+    expect(parseEnv(VALID)).not.toHaveProperty("github");
   });
 
   test("considère une valeur vide, ou laissée à <TO_PROVIDE>, comme manquante", () => {
     expect(failureOf({ ...VALID, HOST: "  " })).toContain("manquante(s) : HOST");
-    expect(failureOf({ ...VALID, GITHUB_APP_CLIENT_SECRET: "<TO_PROVIDE>" })).toContain(
-      "manquante(s) : GITHUB_APP_CLIENT_SECRET",
+    expect(failureOf({ ...VALID, DATA_ENCRYPTION_KEY: "<TO_PROVIDE>" })).toContain(
+      "manquante(s) : DATA_ENCRYPTION_KEY",
     );
   });
 
@@ -63,12 +61,21 @@ describe("parseEnv", () => {
     expect(message).not.toContain("court-mais-secret");
   });
 
+  test("refuse une clé de chiffrement des données trop courte, sans jamais l'afficher", () => {
+    const message = failureOf({ ...VALID, DATA_ENCRYPTION_KEY: "courte-mais-secrete" });
+    expect(message).toContain("invalide(s) : DATA_ENCRYPTION_KEY");
+    expect(message).not.toContain("courte-mais-secrete");
+  });
+
+  test("refuse un délai de silence HTTP au-delà de 255 s, que Bun.serve refuserait", () => {
+    expect(failureOf({ ...VALID, HTTP_IDLE_TIMEOUT_SECONDS: "256" })).toContain(
+      "invalide(s) : HTTP_IDLE_TIMEOUT_SECONDS",
+    );
+  });
+
   test("n'admet http que vers la boucle locale : un cookie ou un jeton ne circule jamais en clair", () => {
     expect(failureOf({ ...VALID, APP_ORIGIN: "http://pipliner.example.org" })).toContain(
       "invalide(s) : APP_ORIGIN",
-    );
-    expect(failureOf({ ...VALID, GITHUB_API_URL: "http://api.github.com" })).toContain(
-      "invalide(s) : GITHUB_API_URL",
     );
     expect(failureOf({ ...VALID, APP_ORIGIN: "https://pipliner.example.org" })).toBe("");
   });
@@ -79,28 +86,18 @@ describe("parseEnv", () => {
     );
   });
 
-  test("renvoie une configuration typée, adresses GitHub sans barre finale", () => {
+  test("renvoie une configuration typée", () => {
     expect(parseEnv(VALID)).toEqual({
       host: "127.0.0.1",
       port: 8094,
       appOrigin: "http://127.0.0.1:8094",
       sessionSecret: "not-a-real-secret-only-for-tests-000000",
-      github: {
-        webUrl: "https://github.com",
-        apiUrl: "https://api.github.com",
-        clientId: "Iv1.not-a-real-client",
-        clientSecret: "not-a-real-client-secret",
-        timeoutMs: 10_000,
-      },
-      limits: {
-        reposMax: 1000,
-        branchesMax: 300,
-        activeBranchDays: 90,
-        dispatchMaxTargets: 50,
-        dispatchConcurrency: 3,
-        runPollMinSeconds: 10,
-        runTrackMaxMinutes: 30,
-      },
+      dataEncryptionKey: "not-a-real-data-key-only-for-tests-00000",
+      databasePath: "./data/pipliner.sqlite",
+      httpIdleTimeoutSeconds: 240,
+      sessions: { maxDays: 30, perUserMax: 5 },
+      auditRetentionDays: 365,
+      twoFactor: { everyHours: 24, maxAttempts: 5, lockMinutes: 15 },
     });
   });
 });
