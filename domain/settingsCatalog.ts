@@ -1,8 +1,8 @@
 /**
- * Catalogue des réglages du site (page Settings) : SEUL propriétaire de leur liste, de leurs bornes, de
- * leurs valeurs par défaut et de leurs libellés (CLAUDE.md §4 O). Le serveur en tire sa validation, la
- * page ses formulaires. Aucune adresse n'a de valeur par défaut (CLAUDE.md §6.3) : la connexion à
- * GitHub vient de `.env` une première fois (`bun run settings:import-env`), puis du site.
+ * Catalogue des réglages du site (pages Settings et installation) : SEUL propriétaire de leur liste, de
+ * leurs bornes, de leurs valeurs par défaut et de leurs libellés (CLAUDE.md §4 O). Le serveur en tire sa
+ * validation, les pages leurs formulaires. Aucune adresse n'a de valeur par défaut (CLAUDE.md §6.3) : la
+ * connexion à GitHub se saisit sur la page d'installation (/setup), puis sur la page Settings.
  */
 
 /** Connexion à GitHub : les quatre se modifient ensemble. */

@@ -6,7 +6,7 @@ import { forgetSession } from "../../stores/session-store.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
 import { INPUT_CLASS } from "../../ui/field-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import "../confirm-dialog.ts";
 
 /**
@@ -79,7 +79,7 @@ export class AppDataPanel extends TiniComponent {
             aria-busy=${this.deleting ? "true" : "false"}
             @click=${this.deleteData}
           >
-            ${this.deleting ? shieldLoader(16) : nothing} Delete my data
+            ${this.deleting ? brandSpinner(16) : nothing} Delete my data
           </button>
         </div>
       </app-confirm-dialog>

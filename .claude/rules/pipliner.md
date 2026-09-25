@@ -22,7 +22,11 @@ anything.
   value pointing at a real machine.
 - Website settings (GitHub connection, limits) are owned by `domain/settingsCatalog.ts`, stored in the
   `settings` table and read on every request through `deps.settings()`; never cache them, never put
-  them back in env. Their `.env` names serve only `bun run settings:import-env`.
+  them back in env. The GitHub connection is entered on `/setup` (setup mode, opened by a code from
+  `bun run settings:setup-code`), then on the Settings page. `/api/setup/*` are the only API routes
+  without a session: widening `SETUP_ROUTES` is a security decision (a test pins it).
+- Signed-in pages share one shell: left sidebar (`app/components/navigation/side-nav.ts`, a drawer
+  below 1024 px) and the page on the right (`app/layouts/dashboard.ts`).
 - Admin routes live under `/api/admin/*` (behind `requireAdmin`); a sensitive admin write also calls
   `checkStepUpCode` and records its history action in the same transaction.
 - Errors: `{ detail: { code, message } }`, types owned by `domain/apiContract.ts`. Never send an
@@ -61,7 +65,10 @@ anything.
   figure is computed: `docs/DASHBOARD.md` — keep it true when the collector or the calculation changes.
 - The product name is EasyActions (codename Pipliner in code, cookies, `/health`, logs). Brand colours
   live only in `app/styles/theme-easyactions.css` (overrides of MASKAI brand tokens, contrast-tested by
-  `tests/unit/theme.test.ts`); never write a brand colour in a component. The logo is `app/ui/brand-mark.ts`.
+  `tests/unit/theme.test.ts`); never write a brand colour in a component. The logo is `app/ui/brand-mark.ts`;
+  its turning gear is the only loading indicator (`brandLoader` for page waits, `brandSpinner` for buttons
+  and toasts). The start screen in `app/index.html` copies its drawing; `tests/unit/bootScreen.test.ts`
+  keeps the two identical.
 
 ## Safety
 

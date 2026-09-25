@@ -3,8 +3,8 @@ import { z } from "zod";
 /**
  * Variables d'environnement requises au démarrage (CLAUDE.md §6.3). Cette liste est la source unique :
  * `.env.example` la reprend, et `parseEnv` s'en sert pour nommer tout ce qui manque d'un coup.
- * Depuis M7, la connexion à GitHub et les plafonds sont des réglages du site (en base) : `.env` ne les
- * donne plus qu'une fois, à `bun run settings:import-env` (server/schemas/settings.schema.ts).
+ * La connexion à GitHub et les plafonds sont des réglages du site (en base), jamais dans `.env` : la
+ * connexion se saisit sur la page d'installation (/setup), puis sur la page Settings.
  */
 export const REQUIRED_VARIABLES = [
   "HOST",

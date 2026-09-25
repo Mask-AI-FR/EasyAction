@@ -8,11 +8,13 @@ import { renderError, renderNotFound } from "./exceptions/errorHandler.ts";
 import { apiRouter } from "./routers/api.ts";
 import { authRouter, type AuthDeps } from "./routers/auth.ts";
 import { healthRouter } from "./routers/health.ts";
+import { setupRouter } from "./routers/setup.ts";
+import { setupGate } from "./middleware/setupGate.ts";
 import { deriveDataKey, deriveRecoveryCodeKey } from "./security/dataCipher.ts";
 import { DashboardCollector } from "./services/dashboardCollector.ts";
 import { GitHubTokens } from "./services/githubTokens.ts";
 import type { SessionStore } from "./services/sessions.ts";
-import { readSettings, SettingsMissingError, type EffectiveSettings } from "./services/settings.ts";
+import { isConfigured, readSettings, SettingsMissingError, type EffectiveSettings } from "./services/settings.ts";
 
 /**
  * Application Hono sans effet de bord au chargement, testable par `app.request()` (motif des services
@@ -37,8 +39,12 @@ export function buildApp(env: PiplinerEnv, db: Database): Hono {
   };
   const app = new Hono();
   app.use("*", secureHeaders(securityHeadersFor(settings)));
+  // Sans connexion à GitHub, seule l'installation répond (`middleware/setupGate.ts`).
+  app.use("*", setupGate(() => isConfigured(db, dataKey)));
   app.route("/", healthRouter);
   app.route("/auth", authRouter(deps));
+  // AVANT `/api` : l'installation répond sans session ; les gardes de `/api` ne s'exécutent pas pour elle.
+  app.route("/api/setup", setupRouter(deps));
   app.route("/api", apiRouter(deps));
   // Une adresse d'API ou d'authentification inconnue répond en JSON, jamais par la page de l'app.
   app.all("/api/*", renderNotFound);

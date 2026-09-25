@@ -20,8 +20,13 @@ Every query lives in `server/repositories/` (one module per table).
 | `settings` (M7) | the website settings: GitHub addresses, the GitHub App's client ID and **encrypted** client secret, limits; when each changed and by whom | who changed it (id) | the id is set to `NULL` when that user is erased |
 
 - Times are seconds since the Unix epoch, UTC.
-- The browser holds only the session cookie (a random id) and, during a sign-in, the 10-minute flow
-  cookie. The web app keeps its selection, the runs it follows and a 60-second read cache in memory.
+- The browser holds the session cookie (a random id), during a sign-in the 10-minute flow cookie, and
+  one preference in its local storage: `easyactions.lastOrg`, the login of the last organization opened,
+  so it is selected by default. It is an organization's name, not personal data (only organizations are
+  listed, `server/adapters/githubRepos.ts`), and it does not outlive the session: deleted at sign-out
+  and "Delete my data" (`forgetSession`), and whenever the sign-in page opens without a session (ended
+  or expired, `app/pages/login.ts`), so the next person on a shared browser never sees it. The web app
+  keeps its selection, the runs it follows and a 60-second read cache in memory.
 - The logs hold no personal data at all (§9).
 - **The dashboard (M8) stores nothing in the database.** Commit authors' logins and e-mails exist only
   in server memory during one collection; the result kept in memory for "Dashboard: seconds a result is
@@ -143,9 +148,11 @@ Every query lives in `server/repositories/` (one module per table).
 - Actions are owned by `domain/auditActions.ts`: `session.create`, `session.end`, `session.end_others`,
   `session.end_all`, `account.export`, `account.delete`, and since M6 `two_factor.enroll`,
   `two_factor.verify`, `two_factor.fail`, `two_factor.lock`, `two_factor.recovery_used`,
-  `two_factor.recovery_regenerated`, `two_factor.reset` (the CLI writes it without an actor), and since
-  M7 `settings.update`, `settings.github_update`, `settings.import`, `user.role_change`,
-  `user.sign_out`, `user.remove`. Admins read it on the History page (§7).
+  `two_factor.recovery_regenerated`, `two_factor.reset` (the CLI writes it without an actor), since
+  M7 `settings.update`, `settings.github_update`, `user.role_change`, `user.sign_out`, `user.remove`,
+  and `settings.setup` (setup page) and `settings.reset` (`settings:setup-code --reset`), both without
+  an actor. `settings.import` remains only for older rows (the removed `settings:import-env`). Admins
+  read it on the History page (§7).
 - Written in the **same transaction** as the action: if the history cannot be written, the action
   does not happen (fail closed).
 - No personal data besides the actor and target ids; `detail` holds only the **names** of the
@@ -169,9 +176,20 @@ Every query lives in `server/repositories/` (one module per table).
   are **read on every request** (no copy in memory, so a server command is seen at once). The security
   values (sessions, daily code, history retention) stay in `.env`, where a website admin cannot weaken
   them.
-- **First setup.** `bun run settings:import-env` copies the `.env` values once. It writes only what is
-  missing and prints names, never values. Without a GitHub connection in the database, the server
-  refuses to start and names this command.
+- **First setup, in the browser — never in `.env`.** Without a readable GitHub connection (a new
+  install, a cleared connection, or a secret unreadable after a `DATA_ENCRYPTION_KEY` change), the server
+  starts in **setup mode** (`server/middleware/setupGate.ts`): every `/api` route answers
+  `503 setup_required`, `/auth` sends to `/setup`, and only `/health` and three setup routes answer
+  (`server/routers/setup.ts`, pinned by `tests/unit/secondFactorGate.test.ts`).
+  - Testing and saving need a **setup code** from `bun run settings:setup-code`, run on the server. The
+    code is its expiry plus an 80-bit HMAC-SHA256 tag (key derived from `DATA_ENCRYPTION_KEY` with its
+    own HKDF label), checked in constant time, valid 30 minutes; nothing is stored. It is printed once on
+    the operator's terminal, never logged. Without it, nobody can make the server call an address.
+  - The setup page applies the same pairing, https and connection-test rules as below. Saving writes
+    the connection (secret encrypted), history `settings.setup` with no actor, and closes any remaining
+    session in the same transaction: its tokens could come from another app.
+  - Once a connection works, the setup routes answer `404`: setup never overwrites a working
+    connection. The first admin is still made on the server (`bun run users:promote`).
 - **The GitHub connection decides where every user's token is sent.** Saving it therefore needs:
   - a current 6-digit code;
   - an API address that pairs with the web address (`domain/githubHosts.ts`): github.com →
@@ -188,10 +206,10 @@ Every query lives in `server/repositories/` (one module per table).
   keeps the sessions.
 - **Accepted risk:** an admin is trusted like the server's operator, since they can point EasyActions
   at another GitHub. The history records who did it, and everybody is signed out.
-- **Recovery** when a wrong connection locks everybody out: fix `.env`, stop the server, then run
-  `bun run settings:import-env --replace`. It also signs everybody out when the address or client ID
-  changes, without revocation (the old connection may be the broken one; the access tokens expire
-  within 8 hours).
+- **Recovery** when a wrong connection locks everybody out: `bun run settings:setup-code --reset` clears
+  the connection and ends every session in one transaction (history `settings.reset`), without
+  revocation (the cleared connection may be the broken one; the access tokens expire within 8 hours),
+  then prints a setup code: the server is back in setup mode.
 - **Users page:** role, daily code on or off, signed-in browsers, last sign-in. Making or removing an
   admin, removing someone's authenticator app, and deleting someone's data all need a current code.
   Signing someone out does not, since it only ends sessions. EasyActions always keeps one admin: the
@@ -207,7 +225,10 @@ Every query lives in `server/repositories/` (one module per table).
 | Sensitive admin action with a wrong, reused or missing code | **Closed**: `400 invalid_code` (counted), `429 code_locked` |
 | Invalid limit, addresses that do not pair, failed connection test | **Closed**: `400`, nothing saved |
 | Demoting or deleting the last admin | **Closed**: `400` |
-| GitHub connection missing, or its secret unreadable (data key changed), at start | **Closed at boot**, naming `bun run settings:import-env` |
+| No readable GitHub connection | **Closed** for every feature (setup mode): `503 setup_required`, `/auth` → `/setup` |
+| Setup code wrong, expired or missing | **Closed**: `400 invalid_code`, nothing fetched, nothing saved |
+| Setup attempted once a connection works | **Closed**: `404` |
+| POST to the setup routes without the app's exact `Origin` | **Closed**: `403` |
 | Settings unreadable while computing the CSP's image sources | **Closed**: no outside image |
 
 ## 8. Export and erasure — the Account page (`/account`)

@@ -8,6 +8,9 @@ import type {
   GitHubConnectionSavedBody,
   GitHubConnectionUpdateRequest,
   SettingsBody,
+  SetupConnectionRequest,
+  SetupStatusBody,
+  SetupTestRequest,
 } from "../../domain/settingsContract.ts";
 import type {
   ApiErrorBody,
@@ -94,10 +97,19 @@ function secondFactorAgain(): void {
   location.assign(`/two-factor?returnTo=${encodeURIComponent(here)}`);
 }
 
-/** L'erreur d'une réponse en échec ; si c'est le code du jour qui manque, part vers sa page. */
+/**
+ * L'installation n'est pas faite (aucune connexion à GitHub côté serveur) : page d'installation,
+ * rechargement complet.
+ */
+function setupFirst(): void {
+  if (location.pathname !== "/setup") location.assign("/setup");
+}
+
+/** L'erreur d'une réponse en échec ; si c'est le code du jour ou l'installation qui manque, part vers sa page. */
 async function failureOf(response: Response): Promise<ApiError> {
   const error = await apiErrorFrom(response);
   if (error.code === "second_factor_required") secondFactorAgain();
+  if (error.code === "setup_required") setupFirst();
   return error;
 }
 
@@ -134,7 +146,7 @@ const repoPath = (repo: RepoName): string =>
 async function fetchSession(): Promise<SessionBody | null> {
   const response = await fetch("/api/session", { headers: { Accept: "application/json" } });
   if (response.status === 401) return null;
-  if (!response.ok) throw await apiErrorFrom(response);
+  if (!response.ok) throw await failureOf(response);
   return (await response.json()) as SessionBody;
 }
 
@@ -205,6 +217,12 @@ export const api = {
     regenerateRecoveryCodes: (code: string) =>
       request<RecoveryCodesBody>("/api/account/two-factor/recovery-codes", { code }),
   },
+  /** Installation (/setup) : jamais en mémoire, jamais rejouée ; test et enregistrement portent le code d'installation. */
+  setup: {
+    status: () => request<SetupStatusBody>("/api/setup"),
+    test: (input: SetupTestRequest) => request<ConnectionTestBody>("/api/setup/test", input),
+    save: (input: SetupConnectionRequest) => postExpectingNoContent("/api/setup/github", input),
+  },
   /** Administration : toujours lue fraîche, jamais rejouée. Les actions sensibles portent un code. */
   admin: {
     settings: () => request<SettingsBody>("/api/admin/settings"),
@@ -268,6 +286,8 @@ export function errorCopy(error: ApiError | null): { heading: string; descriptio
       return { heading: "Access refused by GitHub", description: "The organization may restrict GitHub Apps, or your role does not allow this." };
     case "invalid_code":
       return { heading: "Wrong code", description: "Check that your phone shows the right time, then type the new code." };
+    case "setup_required":
+      return { heading: "EasyActions is not set up yet", description: "Its GitHub App connection must be entered on the setup page first." };
     case "code_locked": {
       const minutes = Math.max(1, Math.ceil((error.details.retryAfterSeconds ?? 60) / 60));
       return { heading: "Too many wrong codes", description: `Try again in about ${minutes} min.` };

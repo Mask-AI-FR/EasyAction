@@ -197,7 +197,7 @@ export class AppPageRepos extends TiniComponent {
 
   /**
    * ÉCHEC OUVERT : l'avatar n'est qu'une décoration ; sans lui, l'en-tête garde le nom de l'organisation.
-   * La liste des organisations est déjà en mémoire (l'en-tête du tableau de bord l'a lue).
+   * La liste des organisations est déjà en mémoire (la barre latérale l'a lue).
    */
   private async loadAvatar(org: string): Promise<void> {
     this.avatarUrl = null;

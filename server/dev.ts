@@ -6,7 +6,7 @@ import { logger } from "./config/logger.ts";
 import { openDatabase } from "./db/database.ts";
 import { deriveDataKey } from "./security/dataCipher.ts";
 import { purgeExpiredData } from "./services/sessions.ts";
-import { assertSettingsReady } from "./services/settings.ts";
+import { isConfigured } from "./services/settings.ts";
 
 /**
  * Point d'entrée de DÉVELOPPEMENT (`bun run dev` = `bun --hot server/dev.ts`).
@@ -20,7 +20,8 @@ import { assertSettingsReady } from "./services/settings.ts";
 // propriétaire. SQLite n'a pas d'option de mode, et DATABASE_PATH peut viser n'importe quel dossier.
 process.umask(0o077);
 const db = openDatabase(env.databasePath);
-assertSettingsReady(db, deriveDataKey(env.dataEncryptionKey));
+// Sans connexion à GitHub, le serveur démarre quand même, en mode installation (seul /setup répond).
+if (!isConfigured(db, deriveDataKey(env.dataEncryptionKey))) logger.warn("setup.required", { route: "/setup" });
 purgeExpiredData(db, env.auditRetentionDays);
 
 const app = buildApp(env, db);

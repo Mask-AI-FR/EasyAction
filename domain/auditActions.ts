@@ -34,8 +34,12 @@ export const AUDIT_ACTIONS = [
   "settings.update",
   /** Connexion à GitHub modifiée sur la page Settings. */
   "settings.github_update",
-  /** Réglages importés de `.env` (ligne de commande). */
+  /** Réglages importés de `.env` : l'ancienne commande `settings:import-env`, gardée pour l'historique existant. */
   "settings.import",
+  /** Connexion à GitHub enregistrée sur la page d'installation (/setup, ouverte par un code du serveur). */
+  "settings.setup",
+  /** Connexion à GitHub effacée en ligne de commande (`settings:setup-code --reset`) : retour à l'installation. */
+  "settings.reset",
   /** Rôle changé (administrateur ↔ membre). */
   "user.role_change",
   /** Un administrateur ferme toutes les sessions de quelqu'un. */

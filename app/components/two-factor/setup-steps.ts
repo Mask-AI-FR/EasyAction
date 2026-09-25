@@ -4,7 +4,7 @@ import type { EnrollmentBody } from "../../../domain/twoFactorContract.ts";
 import { api, ApiError, asLoadError, ENROLLMENT_QR_URL, errorCopy, type LoadState } from "../../services/api-client.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import { errorPanel } from "../empty-state.ts";
 import "./code-field.ts";
 import "./recovery-codes.ts";
@@ -84,7 +84,7 @@ export class AppSetupSteps extends TiniComponent {
           aria-busy=${this.busy ? "true" : "false"}
           @click=${this.confirm}
         >
-          ${this.busy ? shieldLoader(16) : nothing} Confirm
+          ${this.busy ? brandSpinner(16) : nothing} Confirm
         </button>
       </li>
     </ol>`;

@@ -9,8 +9,9 @@ import { migrateUp } from "../../server/db/migrator.ts";
 import { upsertSignedInUser } from "../../server/repositories/users.ts";
 import { deriveDataKey } from "../../server/security/dataCipher.ts";
 import {
-  assertSettingsReady,
-  importSettings,
+  clearGitHubConnection,
+  completeSetup,
+  isConfigured,
   readSettings,
   saveGitHubConnection,
   settingsBodyOf,
@@ -46,10 +47,11 @@ describe("réglages du site", () => {
     expect(settings.limits.dispatchMaxTargets).toBe(50);
   });
 
-  test("sans connexion à GitHub : refus de démarrer, qui nomme les réglages et la commande, jamais une valeur", () => {
+  test("sans connexion à GitHub : réglages illisibles, serveur en mode installation", () => {
     const db = bareDatabase();
     expect(() => readSettings(db, dataKey)).toThrow(SettingsMissingError);
-    expect(() => assertSettingsReady(db, dataKey)).toThrow(/settings:import-env/);
+    expect(isConfigured(db, dataKey)).toBe(false);
+    expect(isConfigured(testDatabase(), dataKey)).toBe(true);
   });
 
   test("secret illisible (DATA_ENCRYPTION_KEY changée) : même refus, sur le secret", () => {
@@ -86,32 +88,37 @@ describe("réglages du site", () => {
 
   test("une paire d'adresses qui ne va pas n'est jamais enregistrée", () => {
     const db = testDatabase();
-    expect(() => saveGitHubConnection(db, dataKey, { ...CONNECTION, webUrl: "https://github.com" }, null)).toThrow();
+    const unpaired = { ...CONNECTION, webUrl: "https://github.com" };
+    expect(() => saveGitHubConnection(db, dataKey, unpaired, withAdmin(db))).toThrow();
+    expect(() => completeSetup(bareDatabase(), dataKey, unpaired)).toThrow();
     expect(readSettings(db, dataKey).github.webUrl).toBe(TEST_GITHUB.webUrl);
   });
 
-  test("import depuis .env : n'écrase pas ce que le site a réglé ; --replace le fait", () => {
+  test("installation : la connexion enregistrée (secret chiffré), historique sans auteur, sessions restantes fermées", () => {
     const db = bareDatabase();
-    expect(importSettings(db, dataKey, { github: CONNECTION, limits: { reposMax: 10 } }, false).written.sort()).toEqual(
-      ["githubApiUrl", "githubClientId", "githubClientSecret", "githubWebUrl", "reposMax"],
-    );
-    expect(importSettings(db, dataKey, { github: null, limits: { reposMax: 20 } }, false).written).toEqual([]);
-    expect(readSettings(db, dataKey).limits.reposMax).toBe(10);
-    expect(importSettings(db, dataKey, { github: null, limits: { reposMax: 20 } }, true).written).toEqual(["reposMax"]);
-    expect(readSettings(db, dataKey).limits.reposMax).toBe(20);
-    expect(lastAudit(db)?.action).toBe("settings.import");
-  });
-
-  test("--replace vers une autre app ou une autre adresse : tout le monde est déconnecté, comme sur la page Settings", () => {
-    const db = testDatabase();
     const sessionCount = () => db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM sessions").get()?.n;
     signInDirectly(env, db);
-    const sameApp = importSettings(db, dataKey, { github: { ...CONNECTION, clientSecret: "rotated-secret" }, limits: {} }, true);
-    expect(sameApp.signedEveryoneOut).toBe(false);
-    expect(sessionCount()).toBe(1);
-    const otherApp = importSettings(db, dataKey, { github: { ...CONNECTION, clientId: "Iv1.other" }, limits: {} }, true);
-    expect(otherApp.signedEveryoneOut).toBe(true);
+    completeSetup(db, dataKey, CONNECTION);
+    expect(readSettings(db, dataKey).github).toEqual({ ...CONNECTION, timeoutMs: 10_000 });
+    expect(JSON.stringify(db.query("SELECT value FROM settings").all())).not.toContain(CONNECTION.clientSecret);
     expect(sessionCount()).toBe(0);
-    expect(lastAudit(db)?.action).toBe("session.end_all");
+    const actions = db.query<{ action: string; actor_id: number | null }, []>("SELECT action, actor_id FROM audit_events ORDER BY id").all();
+    expect(actions.slice(-2)).toEqual([
+      { action: "settings.setup", actor_id: null },
+      { action: "session.end_all", actor_id: null },
+    ]);
+  });
+
+  test("remise à zéro (--reset) : connexion effacée, tout le monde déconnecté, retour à l'installation", () => {
+    const db = testDatabase();
+    signInDirectly(env, db);
+    expect(clearGitHubConnection(db)).toBe(1);
+    expect(isConfigured(db, dataKey)).toBe(false);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM sessions").get()?.n).toBe(0);
+    const actions = db.query<{ action: string }, []>("SELECT action FROM audit_events ORDER BY id").all().map((row) => row.action);
+    expect(actions).toContain("settings.reset");
+    expect(actions.at(-1)).toBe("session.end_all");
+    // Les plafonds, eux, restent : seule la connexion est effacée.
+    expect(settingsBodyOf(db).limits.reposMax).toBe(1000);
   });
 });

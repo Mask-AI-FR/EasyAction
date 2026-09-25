@@ -46,13 +46,19 @@ repository with its branches and workflows, plus the live status of each one. Yo
 - **Your account.** See every browser where you are signed in, sign the others out, make new recovery
   codes, change your authenticator app, download your data or delete it. Sign-ins and security actions
   are kept in a history.
-- **Settings in the website, for admins.** Change the GitHub connection (addresses, GitHub App client
-  ID and secret) and the limits without editing files. Manage users: roles, authenticator reset,
-  sign-out, deletion. Read the security history. Sensitive changes ask for a current 6-digit code.
+- **Settings in the website, for admins.** Enter the GitHub connection (addresses, GitHub App client
+  ID and secret) on a setup page the first time, then change it and the limits without editing files.
+  Manage users: roles, authenticator reset, sign-out, deletion. Read the security history. Sensitive
+  changes ask for a current 6-digit code.
 - **Statistics dashboard.** Each organization opens on its dashboard: people who committed on any
   branch, successful and failed runs, success rate, average duration and branches, compared with the
   previous period; runs over time, rankings by repository, top failing workflows and recent failures.
   7, 30 or 90 days. Every chart has a table view, and the page names anything it could not read.
+- **Sidebar, organization already chosen.** The navigation sits on the left (a drawer on a phone): your
+  organization with its dashboard and repositories, the admin pages, and your account card with its
+  sign-out button. The organization you opened last in this browser is selected for you (otherwise the
+  first of your list); switch to another from the card at the top. While anything loads, the
+  EasyActions gear turns.
 - **Organization overview.** See every repository the app can access. Search and filter them by
   visibility, language and archived state, and sort them. The filters are saved in the address, so
   you can share a link to a filtered view.
@@ -130,17 +136,14 @@ Open `.env` and replace every `<TO_PROVIDE>`:
 - `SESSION_SECRET`: the first output of the `openssl` command
 - `DATA_ENCRYPTION_KEY`: the second output (a different value; keep it safe — losing it signs
   everybody out)
-- `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`: your app's values
 
-`.env` is git-ignored. Never commit it.
+`.env` is git-ignored. Never commit it. The GitHub App's client ID and secret never go in it: you
+type them on the website (step 4).
 
-Then create the database (run `db:migrate` again after every upgrade, with the server stopped), and
-copy the GitHub connection and the limits from `.env` into it. This is done once; after that,
-admins change them on the Settings page:
+Then create the database (run it again after every upgrade, with the server stopped):
 
 ```bash
 bun run db:migrate
-bun run settings:import-env
 ```
 
 ### 3. Run
@@ -164,17 +167,30 @@ Desktop window. This reuses a running server, or builds and starts one in the ba
 bun run desktop
 ```
 
-### 4. Become the first admin
+### 4. Connect your GitHub App
 
-Sign in once in the browser (and set up your authenticator app), then run this in the repository
-folder, with your GitHub login instead of `your-github-login`:
+The first time, the server starts in **setup mode**: open http://127.0.0.1:8094 and it shows the
+setup page. In the repository folder, get a one-time setup code (it works for 30 minutes):
+
+```bash
+bun run settings:setup-code
+```
+
+On the setup page, type that code, the GitHub address (the API address fills itself in), your app's
+**Client ID** and **client secret**, then **Test connection** and **Save and finish**. The secret is
+stored encrypted in the database and never shown again.
+
+### 5. Become the first admin
+
+Sign in with GitHub (and set up your authenticator app), then run this in the repository folder, with
+your GitHub login instead of `your-github-login`:
 
 ```bash
 bun run users:promote your-github-login
 ```
 
-Reload the page: a **Settings** link appears in the header. Other admins can then be made from the
-Users page.
+Reload the page: an **Administration** section (Settings, Users, History) appears in the sidebar.
+Other admins can then be made from the Users page.
 
 ## Configuration
 
@@ -183,9 +199,9 @@ Configuration has two places:
 - **`.env`, for the server and security.** Every variable in the table below is **required**. If one
   is missing, still set to `<TO_PROVIDE>`, or invalid, the server does not start and lists the names
   of the problem variables (never their values). `.env.example` documents each one.
-- **The Settings page, for the website settings** (GitHub connection and limits, second table). They
-  are stored in the database. The first time, `bun run settings:import-env` copies them from `.env`;
-  after that, `.env`'s copies are ignored.
+- **The website, for the website settings** (GitHub connection and limits, second table). They are
+  stored in the database: the GitHub connection is entered once on the setup page, then admins change
+  everything on the Settings page. Limits start at the defaults below.
 
 | Variable | Purpose | Default in template |
 |---|---|---|
@@ -203,20 +219,20 @@ Configuration has two places:
 | `TWO_FACTOR_MAX_ATTEMPTS` | Wrong codes before a lock (3–20) | `5` |
 | `TWO_FACTOR_LOCK_MINUTES` | First lock, doubled at each next one, 24 h at most (1–1440) | `15` |
 
-Website settings (Settings page; the `.env` name is used only by `bun run settings:import-env`):
+Website settings (setup page, then Settings page):
 
-| Setting (`.env` name) | Purpose | Default |
+| Setting | Purpose | Default |
 |---|---|---|
-| GitHub web and API addresses (`GITHUB_WEB_URL`, `GITHUB_API_URL`) | github.com, GHE.com or your GitHub Enterprise Server; the API address must match the web address | — |
-| GitHub App client ID and secret (`GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`) | The app EasyActions signs in with; the secret is stored encrypted and never shown | — |
-| GitHub timeout (`GITHUB_TIMEOUT_MS`) | Timeout for every GitHub call (1000–60000 ms) | `10000` |
-| Repositories read per organization (`REPOS_MAX`) | Above it, the list says it is truncated | `1000` |
-| Branches read per repository (`BRANCHES_MAX`) | Max branches listed | `300` |
-| Days before a branch is stale (`ACTIVE_BRANCH_DAYS`) | Older branches are listed as "Stale" | `90` |
-| Pipelines per bulk run (`DISPATCH_MAX_TARGETS`) | Max pipelines one bulk run may start | `50` |
-| Dispatches sent at the same time (`DISPATCH_CONCURRENCY`) | Parallel requests to GitHub | `3` |
-| Live status: minimum seconds between checks (`RUN_POLL_MIN_SECONDS`) | Polling floor | `10` |
-| Live status: minutes runs are followed (`RUN_TRACK_MAX_MINUTES`) | Then "Status unknown" | `30` |
+| GitHub web and API addresses | github.com, GHE.com or your GitHub Enterprise Server; the API address must match the web address | — |
+| GitHub App client ID and secret | The app EasyActions signs in with; the secret is stored encrypted and never shown | — |
+| GitHub timeout | Timeout for every GitHub call (1000–60000 ms) | `10000` |
+| Repositories read per organization | Above it, the list says it is truncated | `1000` |
+| Branches read per repository | Max branches listed | `300` |
+| Days before a branch is stale | Older branches are listed as "Stale" | `90` |
+| Pipelines per bulk run | Max pipelines one bulk run may start | `50` |
+| Dispatches sent at the same time | Parallel requests to GitHub | `3` |
+| Live status: minimum seconds between checks | Polling floor | `10` |
+| Live status: minutes runs are followed | Then "Status unknown" | `30` |
 | Dashboard: repositories read | The most recently pushed first (1–500) | `50` |
 | Dashboard: runs read per repository and period | GitHub lists 1,000 at most (100–1000) | `500` |
 | Dashboard: commits read per repository | All branches, both periods (100–10000) | `2000` |
@@ -224,7 +240,8 @@ Website settings (Settings page; the `.env` name is used only by `bun run settin
 | Dashboard: seconds allowed to read GitHub | Repositories not read in time are named (10–200) | `60` |
 
 Changing the GitHub address or client ID signs everybody out. If a wrong value locks everybody out,
-fix `.env`, stop the server and run `bun run settings:import-env --replace`.
+run `bun run settings:setup-code --reset`: it clears the connection (signing everybody out), puts the
+server back in setup mode and prints a new setup code.
 
 ## Security
 
@@ -235,6 +252,9 @@ fix `.env`, stop the server and run `bun run settings:import-env --replace`.
 - **Admins are checked by the server.** Every admin route answers `403` to other users. Changing the
   GitHub connection, a role, someone's authenticator app or deleting someone needs a current 6-digit
   code, and the history records who did it.
+- **Setup needs the server.** Until a GitHub connection is saved, only the setup page answers, and only
+  with a one-time code printed by `bun run settings:setup-code` on the server. Once set up, the setup
+  page is closed for good (`--reset` reopens it, from the server only).
 - **CSRF protection.** Every POST must carry the app's exact `Origin`, and cookies are `SameSite=Lax`.
 - **Strict headers.** Every response sets a CSP and `frame-ancestors 'none'`, so the "Run" button
   cannot be embedded in another site (clickjacking).
@@ -264,7 +284,7 @@ bun install --frozen-lockfile && bun run typecheck && bun test && bun run build 
 | `bun run db:migrate` | Creates or upgrades the SQLite database (server stopped) |
 | `bun run db:status` | Tells whether the database is ready |
 | `bun run db:rollback` | Removes the last migration (`--yes` when it deletes data) |
-| `bun run settings:import-env` | Copies the website settings from `.env` into the database (once); `--replace` overwrites them |
+| `bun run settings:setup-code` | Prints a one-time code for the setup page (30 minutes); `--reset` first clears the GitHub connection |
 | `bun run users:promote <login>` | Makes someone an admin (they must have signed in once) |
 | `bun run users:demote <login>` | Removes the admin role (never from the last admin) |
 | `bun run users:reset-two-factor <login>` | Removes someone's authenticator app (lost phone); `--all` for everybody |

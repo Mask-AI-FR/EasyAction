@@ -5,6 +5,7 @@ import { testDatabase } from "../support/testDatabase.ts";
 import { buildApp } from "../../server/app.ts";
 import { parseEnv } from "../../server/config/env.ts";
 import { OPEN_BEFORE_SECOND_FACTOR } from "../../server/middleware/secondFactor.ts";
+import { SETUP_ROUTES } from "../../server/routers/setup.ts";
 
 const env = parseEnv(process.env);
 
@@ -48,7 +49,8 @@ describe("garde du code du jour", () => {
     const routes = apiRoutes(app);
     expect(routes.length).toBeGreaterThan(10);
     for (const route of routes) {
-      if (OPEN_BEFORE_SECOND_FACTOR.has(route.key)) continue;
+      // Les routes d'installation répondent sans session, exprès (voir le dernier test).
+      if (OPEN_BEFORE_SECOND_FACTOR.has(route.key) || SETUP_ROUTES.has(route.key)) continue;
       const response = await requestAs(app, setup, route.method, route.sample);
       const body = (await response.json().catch(() => null)) as { detail?: { code?: string } } | null;
       if (response.status !== 403 || body?.detail?.code !== "second_factor_required") leaked.push(`${route.key} → ${response.status}`);
@@ -77,6 +79,17 @@ describe("garde du code du jour", () => {
     ]);
     const keys = new Set(apiRoutes(buildApp(env, testDatabase())).map((route) => route.key));
     for (const open of OPEN_BEFORE_SECOND_FACTOR) expect(keys.has(open)).toBe(true);
+  });
+
+  test("les routes d'installation sont exactement celles-ci : sans session, fermées (404) une fois installé", async () => {
+    // Les élargir est une décision de sécurité : ce test doit alors changer, en connaissance de cause.
+    expect([...SETUP_ROUTES].sort()).toEqual(["GET /api/setup", "POST /api/setup/github", "POST /api/setup/test"]);
+    const app = buildApp(env, testDatabase());
+    const keys = new Set(apiRoutes(app).map((route) => route.key));
+    for (const open of SETUP_ROUTES) expect(keys.has(open)).toBe(true);
+    for (const path of ["/api/setup/test", "/api/setup/github"]) {
+      expect((await app.request(path, { method: "POST", headers: { Origin: env.appOrigin, "Content-Type": "application/json" }, body: "{}" })).status).toBe(404);
+    }
   });
 
   test("les routes ouvertes répondent sans code du jour, et la déconnexion reste possible", async () => {

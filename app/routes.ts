@@ -17,6 +17,13 @@ export const routes: Route[] = [
     action: () => import("./pages/login.ts"),
   },
   {
+    // L'installation (connexion à l'app GitHub, ouverte par un code du serveur) : sans la mise en page
+    // connectée, puisque personne ne peut encore se connecter.
+    path: "setup",
+    component: "app-page-setup",
+    action: () => import("./pages/setup.ts"),
+  },
+  {
     // Le code à 6 chiffres du jour, ou la mise en place de l'application : sans la mise en page
     // connectée, comme la connexion (rien du tableau de bord avant le code).
     path: "two-factor",

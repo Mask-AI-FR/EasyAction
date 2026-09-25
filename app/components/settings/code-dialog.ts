@@ -2,7 +2,7 @@ import { html, nothing, type PropertyValues } from "lit";
 import { Component, Input, Reactive, TiniComponent } from "@tinijs/core";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import "../confirm-dialog.ts";
 import "../two-factor/code-field.ts";
 
@@ -55,7 +55,7 @@ export class AppCodeDialog extends TiniComponent {
           aria-busy=${this.busy ? "true" : "false"}
           @click=${this.confirm}
         >
-          ${this.busy ? shieldLoader(16) : nothing} ${this.confirmLabel}
+          ${this.busy ? brandSpinner(16) : nothing} ${this.confirmLabel}
         </button>
       </div>
     </app-confirm-dialog>`;

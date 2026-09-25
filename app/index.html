@@ -9,9 +9,36 @@
     <link rel="icon" type="image/svg+xml" href="./public/favicon.svg" />
     <link rel="stylesheet" href="./styles/globals.css" />
     <link rel="stylesheet" href="./styles/theme-easyactions.css" />
+    <link rel="stylesheet" href="./styles/boot-screen.css" />
     <script type="module" src="./main.ts"></script>
   </head>
   <body>
+    <!-- Écran de démarrage, retiré par app/app.ts à la première page prête. Le logo est dessiné ici (le
+         code n'est pas encore chargé) : même engrenage que app/ui/brand-mark.ts (tests/unit/bootScreen.test.ts). -->
+    <div id="boot-screen" class="boot-screen" role="status">
+      <svg viewBox="0 0 512 512" width="64" height="64" aria-hidden="true">
+        <defs>
+          <linearGradient id="boot-gear-fill" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#6EE7A8"></stop>
+            <stop offset="0.5" stop-color="#22C55E"></stop>
+            <stop offset="1" stop-color="#047857"></stop>
+          </linearGradient>
+        </defs>
+        <path
+          class="boot-gear"
+          d="M 223.7 97.25 L 229.56 67.85 A 190 190 0 0 1 282.44 67.85 L 288.3 97.25 A 162 162 0 0 1 323.18 108.59 L 345.2 88.24 A 190 190 0 0 1 387.99 119.33 L 375.44 146.55 A 162 162 0 0 1 397 176.23 L 426.77 172.71 A 190 190 0 0 1 443.11 223.01 L 416.96 237.66 A 162 162 0 0 1 416.96 274.34 L 443.11 288.99 A 190 190 0 0 1 426.77 339.29 L 397 335.77 A 162 162 0 0 1 375.44 365.45 L 387.99 392.67 A 190 190 0 0 1 345.2 423.76 L 323.18 403.41 A 162 162 0 0 1 288.3 414.75 L 282.44 444.15 A 190 190 0 0 1 229.56 444.15 L 223.7 414.75 A 162 162 0 0 1 188.82 403.41 L 166.8 423.76 A 190 190 0 0 1 124.01 392.67 L 136.56 365.45 A 162 162 0 0 1 115 335.77 L 85.23 339.29 A 190 190 0 0 1 68.89 288.99 L 95.04 274.34 A 162 162 0 0 1 95.04 237.66 L 68.89 223.01 A 190 190 0 0 1 85.23 172.71 L 115 176.23 A 162 162 0 0 1 136.56 146.55 L 124.01 119.33 A 190 190 0 0 1 166.8 88.24 L 188.82 108.59 A 162 162 0 0 1 223.7 97.25 Z M 256 138 A 118 118 0 1 0 256 374 A 118 118 0 1 0 256 138 Z"
+          fill="url(#boot-gear-fill)"
+          fill-rule="evenodd"
+          stroke="url(#boot-gear-fill)"
+          stroke-width="12"
+          stroke-linejoin="round"
+        ></path>
+        <circle cx="256" cy="256" r="98" fill="#065F32"></circle>
+        <path d="M 202 256 H 300 M 262 214 L 306 256 L 262 298" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <p class="boot-name" aria-hidden="true"><span class="boot-easy">Easy</span><span class="boot-actions">Actions</span></p>
+      <span class="boot-status">Loading EasyActions</span>
+    </div>
     <app-root></app-root>
   </body>
 </html>

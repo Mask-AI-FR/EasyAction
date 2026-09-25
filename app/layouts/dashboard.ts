@@ -1,24 +1,18 @@
-import { html, nothing } from "lit";
+import { html } from "lit";
 import { Layout, Reactive, TiniComponent } from "@tinijs/core";
 import { getParams, go, ROUTE_CHANGE_EVENT, type OnBeforeEnter } from "@tinijs/router";
-import type { SessionBody } from "../../domain/apiContract.ts";
+import { defaultOrgOf } from "../../domain/defaultOrg.ts";
 import type { OrgSummary } from "../../domain/githubTypes.ts";
 import { api, ApiError } from "../services/api-client.ts";
+import { rememberedOrg, rememberOrg } from "../stores/last-org.ts";
 import { ensureSession, forgetSession, sessionStore } from "../stores/session-store.ts";
 import { StoreController } from "../stores/store-controller.ts";
 import { sharedSheet } from "../styles/shared-sheet.ts";
+import { brandMark, wordmark } from "../ui/brand-mark.ts";
 import { buttonClass } from "../ui/button-classes.ts";
 import { cn } from "../ui/class-names.ts";
-import { SELECT_CLASS } from "../ui/field-classes.ts";
-import { brandMark, wordmark } from "../ui/brand-mark.ts";
-import { shieldLoader } from "../ui/shield-loader.ts";
-
-/** Avatar GitHub à la taille affichée (paramètre `s`), sans perdre ses autres paramètres. */
-function sizedAvatar(url: string, size: number): string {
-  const sized = new URL(url);
-  sized.searchParams.set("s", String(size));
-  return sized.toString();
-}
+import { navIcon } from "../ui/nav-icons.ts";
+import "../components/navigation/side-nav.ts";
 
 function currentOrgParam(): string {
   const org: unknown = getParams().org;
@@ -30,42 +24,43 @@ function currentPath(): string {
   return location.pathname.replace(/\/+$/, "") || "/";
 }
 
-/** Onglets de l'administration ; le serveur, lui, refuse tout ce qui n'est pas administrateur. */
-const ADMIN_TABS = [
-  { href: "/settings", label: "Settings" },
-  { href: "/settings/users", label: "Users" },
-  { href: "/settings/history", label: "History" },
-] as const;
+/** À partir de cette largeur (`lg` de Tailwind), la barre latérale est fixe ; en dessous, un tiroir. */
+const DESKTOP = "(min-width: 1024px)";
 
-const TAB_CLASS = "border-b-2 py-4 text-sm font-medium transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]";
-
-function tabLink(href: string, label: string, current: boolean) {
-  return html`<a
-    href=${href}
-    aria-current=${current ? "page" : nothing}
-    class=${cn(TAB_CLASS, current ? "border-primary text-text-primary" : "border-transparent text-text-secondary hover:text-text-primary")}
-  >${label}</a>`;
-}
+/** Tiroir des petits écrans : `<dialog>` natif (piège de focus, Échap, premier plan), collé à gauche. */
+const DRAWER_CLASS =
+  "m-0 h-dvh max-h-dvh w-[264px] max-w-[88%] border-0 border-r border-border bg-surface-secondary p-0 shadow-modal backdrop:bg-(--backdrop-overlay) open:animate-in open:slide-in-from-left";
 
 /**
- * Coque des pages connectées : en-tête (marque, organisation, onglets, compte, déconnexion) et
- * emplacement de la page. Le routeur de TiniJS place la page comme enfant de cette mise en page,
- * projetée par `<slot>` ; la mise en page reste la même d'une organisation à l'autre.
+ * Coque des pages connectées, portée de MaskAI-Frontend `components/Sidebar.tsx` (commit 12b962f) :
+ * barre latérale à gauche (fixe à partir de 1024 px, tiroir en dessous) et page à droite. Le document
+ * défile, pas un conteneur intérieur : les éléments collants des pages gardent leur repère. Le routeur
+ * de TiniJS place la page dans le `<slot>` et garde cette mise en page d'une page à l'autre.
  */
 @Layout({ name: "app-layout-dashboard" })
 export class AppLayoutDashboard extends TiniComponent implements OnBeforeEnter {
   static override styles = [sharedSheet];
 
   private readonly session = new StoreController(this, sessionStore, "session");
+  private readonly desktop = matchMedia(DESKTOP);
   @Reactive() private orgs: readonly OrgSummary[] = [];
-  @Reactive() private currentOrg = "";
+  /**
+   * L'organisation affichée : celle de l'adresse ; sinon la dernière ouverte dans ce navigateur, ou la
+   * première de la liste (`defaultOrgOf`). Toujours choisie dès que la liste est connue.
+   */
+  @Reactive() private org = "";
   @Reactive() private path = currentPath();
   @Reactive() private signingOut = false;
   @Reactive() private signOutFailed = false;
 
   private readonly onRouteChange = (): void => {
-    this.currentOrg = currentOrgParam();
-    this.path = currentPath();
+    this.followAddress();
+    this.closeDrawer();
+  };
+
+  /** Le tiroir n'a plus lieu d'être quand la fenêtre s'élargit : sinon, une modale invisible resterait ouverte. */
+  private readonly onWidthChange = (): void => {
+    if (this.desktop.matches) this.closeDrawer();
   };
 
   /**
@@ -88,123 +83,133 @@ export class AppLayoutDashboard extends TiniComponent implements OnBeforeEnter {
 
   onCreate(): void {
     addEventListener(ROUTE_CHANGE_EVENT, this.onRouteChange);
-    this.currentOrg = currentOrgParam();
+    this.desktop.addEventListener("change", this.onWidthChange);
+    this.followAddress();
+    this.org ||= rememberedOrg() ?? "";
     void this.loadOrgs();
   }
 
   onDestroy(): void {
     removeEventListener(ROUTE_CHANGE_EVENT, this.onRouteChange);
+    this.desktop.removeEventListener("change", this.onWidthChange);
   }
 
   protected override render() {
-    const session = this.session.value;
     return html`
-      <div class="flex min-h-dvh flex-col bg-background">
-        <header class="chrome sticky top-0 z-10 border-b border-border">
-          <div class="mx-auto flex h-14 w-full max-w-6xl items-center gap-6 px-6">
-            <a href="/orgs" class="flex items-center gap-2.5" aria-label="EasyActions: organizations">
-              ${brandMark(28)} ${wordmark("md")}
-            </a>
-            ${this.renderSectionNav()}
-            <div class="ml-auto">${session ? this.renderAccount(session) : nothing}</div>
-          </div>
-        </header>
-        <main class="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-          <slot></slot>
-        </main>
+      <button
+        type="button"
+        class="sr-only rounded-md bg-surface px-3 py-2 text-sm font-medium text-text-primary shadow-card focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
+        @click=${this.skipToContent}
+      >
+        Skip to content
+      </button>
+      <div class="flex min-h-dvh bg-background">
+        <aside class="sticky top-0 hidden h-dvh w-[264px] shrink-0 border-r border-border bg-surface-secondary lg:block">
+          ${this.renderNav()}
+        </aside>
+        <div class="flex min-w-0 flex-1 flex-col">
+          <header class="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border bg-surface px-4 lg:hidden">
+            <button
+              type="button"
+              class=${buttonClass({ variant: "ghost", size: "icon" })}
+              aria-label="Open navigation"
+              aria-haspopup="dialog"
+              @click=${this.openDrawer}
+            >
+              ${navIcon("menu", "size-5")}
+            </button>
+            <a href="/orgs" class="flex items-center gap-2" aria-label="EasyActions: organizations">${brandMark(24)} ${wordmark("md")}</a>
+          </header>
+          <main id="content" tabindex="-1" class="w-full flex-1 px-6 py-8 outline-none lg:px-10">
+            <div class="mx-auto w-full max-w-6xl"><slot></slot></div>
+          </main>
+        </div>
       </div>
+      <dialog class=${DRAWER_CLASS} aria-label="Navigation" @click=${this.onDrawerClick}>
+        <div class="relative h-full">
+          <button
+            type="button"
+            class=${cn(buttonClass({ variant: "ghost", size: "icon-sm" }), "absolute top-3 right-3 z-[1]")}
+            aria-label="Close navigation"
+            @click=${this.closeDrawer}
+          >
+            ${navIcon("close")}
+          </button>
+          ${this.renderNav()}
+        </div>
+      </dialog>
     `;
   }
 
-  private renderSectionNav() {
-    if (this.currentOrg) return this.renderOrgNav();
-    if (this.path === "/settings" || this.path.startsWith("/settings/")) {
-      return html`<nav aria-label="Administration" class="flex items-center gap-4">
-        ${ADMIN_TABS.map((tab) => tabLink(tab.href, tab.label, this.path === tab.href))}
-      </nav>`;
+  /** Le même contenu dans la barre fixe et dans le tiroir. */
+  private renderNav() {
+    return html`<app-side-nav
+      class="block h-full"
+      .session=${this.session.value}
+      .orgs=${this.orgs}
+      org=${this.org}
+      path=${this.path}
+      .signingOut=${this.signingOut}
+      .signOutFailed=${this.signOutFailed}
+      @org-change=${(event: CustomEvent<string>) => this.onOrgChange(event.detail)}
+      @sign-out=${() => void this.onSignOut()}
+      @navigate=${this.closeDrawer}
+    ></app-side-nav>`;
+  }
+
+  private drawer(): HTMLDialogElement | null {
+    return this.shadowRoot?.querySelector("dialog") ?? null;
+  }
+
+  private openDrawer(): void {
+    const drawer = this.drawer();
+    if (drawer && !drawer.open) drawer.showModal();
+  }
+
+  private readonly closeDrawer = (): void => {
+    const drawer = this.drawer();
+    if (drawer?.open) drawer.close();
+  };
+
+  /** Un clic sur le voile (hors du panneau) arrive sur le `<dialog>` lui-même : il ferme le tiroir. */
+  private onDrawerClick(event: Event): void {
+    if (event.target === event.currentTarget) this.closeDrawer();
+  }
+
+  /** Lien d'évitement : un bouton qui place le focus sur la page (une ancre `#` viserait le document, pas cette racine). */
+  private skipToContent(): void {
+    this.shadowRoot?.getElementById("content")?.focus();
+  }
+
+  /** L'organisation de l'adresse devient la dernière ouverte (retenue par ce navigateur). */
+  private followAddress(): void {
+    const fromAddress = currentOrgParam();
+    if (fromAddress) {
+      this.org = fromAddress;
+      rememberOrg(fromAddress);
     }
-    return nothing;
-  }
-
-  private renderOrgNav() {
-    const current = this.currentOrg;
-    const known = this.orgs.some((org) => org.login.toLowerCase() === current.toLowerCase());
-    const logins = known ? this.orgs.map((org) => org.login) : [current];
-    return html`
-      <nav aria-label="Organization" class="flex items-center gap-4">
-        <label>
-          <span class="sr-only">Organization</span>
-          <select class=${SELECT_CLASS} @change=${this.onOrgChange}>
-            ${logins.map(
-              (login) =>
-                html`<option value=${login} ?selected=${login.toLowerCase() === current.toLowerCase()}>${login}</option>`,
-            )}
-          </select>
-        </label>
-        ${tabLink(`/orgs/${encodeURIComponent(current)}/dashboard`, "Dashboard", this.onDashboard())}
-        ${tabLink(`/orgs/${encodeURIComponent(current)}`, "Repositories", !this.onDashboard())}
-      </nav>
-    `;
-  }
-
-  private renderAccount(session: SessionBody) {
-    return html`
-      <div class="flex items-center gap-3">
-        ${this.signOutFailed
-          ? html`<span role="alert" class="text-xs text-signal-danger-text">
-              Sign-out failed. Please try again.
-            </span>`
-          : nothing}
-        ${session.user.role === "admin"
-          ? html`<a href="/settings" class=${buttonClass({ variant: "ghost", size: "sm" })}>Settings</a>`
-          : nothing}
-        <a
-          href="/account"
-          class="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)] hover:bg-surface-hover focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <img
-            src=${sizedAvatar(session.user.avatarUrl, 64)}
-            alt=""
-            width="28"
-            height="28"
-            class="size-7 rounded-full border border-border"
-          />
-          <span class="text-sm font-medium text-text-primary"><span class="sr-only">Your account: </span>${session.user.login}</span>
-        </a>
-        <button
-          type="button"
-          class=${buttonClass({ variant: "ghost", size: "sm" })}
-          ?disabled=${this.signingOut}
-          aria-busy=${this.signingOut ? "true" : "false"}
-          @click=${this.onSignOut}
-        >
-          ${this.signingOut ? shieldLoader(16) : nothing} Sign out
-        </button>
-      </div>
-    `;
+    this.path = currentPath();
   }
 
   /**
    * ÉCHEC OUVERT : le sélecteur n'est qu'un raccourci. Sans liste, il montre l'organisation courante
-   * seule ; la page /orgs reste la voie principale et affiche l'erreur elle-même.
+   * (ou retenue) seule ; la page /orgs reste la voie principale et affiche l'erreur elle-même. Avec la
+   * liste, une organisation retenue qui n'y est plus cède la place à la première.
    */
   private async loadOrgs(): Promise<void> {
     try {
       this.orgs = (await api.orgs()).orgs;
+      if (!currentOrgParam()) this.org = defaultOrgOf(this.orgs.map((org) => org.login), this.org || null) ?? "";
     } catch (err) {
       if (!(err instanceof ApiError || err instanceof TypeError)) throw err;
       this.orgs = [];
     }
   }
 
-  private onDashboard(): boolean {
-    return this.path.endsWith("/dashboard");
-  }
-
   /** Changer d'organisation garde l'onglet ouvert (tableau de bord ou dépôts). */
-  private onOrgChange(event: Event): void {
-    const org = encodeURIComponent((event.target as HTMLSelectElement).value);
-    go(`/orgs/${org}${this.onDashboard() ? "/dashboard" : ""}`);
+  private onOrgChange(login: string): void {
+    const onDashboard = this.path.endsWith("/dashboard");
+    go(`/orgs/${encodeURIComponent(login)}${onDashboard ? "/dashboard" : ""}`);
   }
 
   /**

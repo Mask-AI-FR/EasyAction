@@ -1,6 +1,7 @@
 import { createStore } from "@tinijs/store";
 import type { SessionBody } from "../../domain/apiContract.ts";
 import { api } from "../services/api-client.ts";
+import { forgetOrg } from "./last-org.ts";
 
 interface SessionState {
   session: SessionBody | null;
@@ -19,7 +20,8 @@ export async function ensureSession(): Promise<SessionBody | null> {
   return sessionStore.session;
 }
 
-/** Après une déconnexion réussie côté serveur. */
+/** Après une déconnexion réussie côté serveur, ou un effacement : la session, et l'organisation retenue. */
 export function forgetSession(): void {
   sessionStore.commit("session", null);
+  forgetOrg();
 }

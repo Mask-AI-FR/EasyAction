@@ -4,7 +4,7 @@ import { DASHBOARD_DAYS, type DashboardDays } from "../../../domain/dashboardCon
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
 import { cn } from "../../ui/class-names.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 
 const LABELS: Record<DashboardDays, string> = { 7: "7 days", 30: "30 days", 90: "90 days" };
 const DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -36,7 +36,7 @@ export class AppPeriodFilter extends TiniComponent {
         aria-busy=${this.busy ? "true" : "false"}
         @click=${() => this.emitEvent("refresh")}
       >
-        ${this.busy ? shieldLoader(16) : nothing} Refresh
+        ${this.busy ? brandSpinner(16) : nothing} Refresh
       </button>
       ${this.renderFreshness()}
     </div>`;

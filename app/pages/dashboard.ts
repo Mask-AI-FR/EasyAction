@@ -11,6 +11,7 @@ import {
 import { api, ApiError, asLoadError, errorCopy } from "../services/api-client.ts";
 import { formatCount, formatDuration, formatPercent } from "../services/chart-theme.ts";
 import { sharedSheet } from "../styles/shared-sheet.ts";
+import { brandLoader } from "../ui/brand-mark.ts";
 import { cn } from "../ui/class-names.ts";
 import { errorPanel } from "../components/empty-state.ts";
 import type { ChartSeries } from "../components/dashboard/bar-chart.ts";
@@ -130,11 +131,11 @@ export class AppPageDashboard extends TiniComponent {
     const data = this.data;
     if (!data) {
       if (this.error !== undefined) return errorPanel(this.error, () => void this.load(true));
-      return html`<div class="space-y-5" aria-busy="true">
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          ${[0, 1, 2, 3, 4, 5].map(() => html`<div class="skeleton-shimmer h-28 rounded-lg"></div>`)}
-        </div>
-        <div class="skeleton-shimmer h-80 rounded-lg"></div>
+      // Première lecture : GitHub peut prendre plusieurs secondes, l'attente le dit, avec le logo.
+      return html`<div role="status" class="grid place-items-center gap-4 rounded-lg border border-border bg-surface px-6 py-20 text-center shadow-card">
+        ${brandLoader(64)}
+        <p class="text-sm font-medium text-text-primary">Reading pipelines and commits from GitHub…</p>
+        <p class="-mt-2 text-xs text-text-secondary">Every repository and branch of ${this.org}; this can take a few seconds.</p>
       </div>`;
     }
     if (data.coverage.repositories === 0) {

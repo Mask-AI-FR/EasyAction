@@ -65,6 +65,49 @@ export function brandMark(size: BrandMarkSize): TemplateResult {
   </svg>`;
 }
 
+/**
+ * Rotation de l'engrenage autour de son centre (celui de la grille 512), lente ; arrêtée sous
+ * `prefers-reduced-motion`. Classes écrites en entier : Tailwind ne génère que ce qu'il lit.
+ */
+const GEAR_TURN = "animate-spin [animation-duration:1.6s] origin-center [transform-box:view-box] motion-reduce:animate-none";
+
+/**
+ * Attente d'une page ou d'une zone : le logo en couleurs, seul l'engrenage tourne (la flèche reste
+ * immobile). Décoratif : l'appelant porte `role="status"` et le texte de l'attente.
+ */
+export function brandLoader(size: 48 | 64): TemplateResult {
+  return html`<svg viewBox="0 0 512 512" width=${size} height=${size} aria-hidden="true" class="shrink-0">
+    <defs>
+      <linearGradient id="ea-gear" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#6EE7A8"></stop>
+        <stop offset="0.5" stop-color="#22C55E"></stop>
+        <stop offset="1" stop-color="#047857"></stop>
+      </linearGradient>
+    </defs>
+    <path
+      class=${GEAR_TURN}
+      d=${STANDARD.gear}
+      fill="url(#ea-gear)"
+      fill-rule="evenodd"
+      stroke="url(#ea-gear)"
+      stroke-width=${STANDARD.corner}
+      stroke-linejoin="round"
+    ></path>
+    <circle cx="256" cy="256" r=${STANDARD.coreR} fill="#065F32"></circle>
+    <path d=${STANDARD.glyph} fill="none" stroke="#FFFFFF" stroke-width=${STANDARD.glyphWidth} stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>`;
+}
+
+/**
+ * Indicateur d'attente dans un bouton, un toast, une pastille : l'engrenage seul, de la couleur du
+ * texte (`currentColor`, donc lisible sur un bouton vert), qui tourne. Remplace le bouclier de MaskAI.
+ */
+export function brandSpinner(size: 16 | 20, className = ""): TemplateResult {
+  return html`<svg viewBox="0 0 512 512" width=${size} height=${size} aria-hidden="true" class=${cn("shrink-0", GEAR_TURN, className)}>
+    <path d=${SMALL.gear} fill="currentColor" fill-rule="evenodd" stroke="currentColor" stroke-width=${SMALL.corner} stroke-linejoin="round"></path>
+  </svg>`;
+}
+
 const WORDMARK_SIZE = {
   md: "text-base",
   lg: "text-2xl",

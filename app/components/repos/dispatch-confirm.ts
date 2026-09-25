@@ -15,7 +15,7 @@ import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
 import { cn } from "../../ui/class-names.ts";
 import { BADGE_CLASS, INPUT_CLASS } from "../../ui/field-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import "../confirm-dialog.ts";
 import "../status-badge.ts";
 
@@ -138,7 +138,7 @@ export class AppDispatchConfirm extends TiniComponent {
           aria-busy=${this.dispatching ? "true" : "false"}
           @click=${() => this.emitEvent("confirm")}
         >
-          ${this.dispatching ? shieldLoader(16) : nothing} Run ${pipelines(plan.items.length)}
+          ${this.dispatching ? brandSpinner(16) : nothing} Run ${pipelines(plan.items.length)}
         </button>
       </div>
     `;

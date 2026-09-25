@@ -36,7 +36,9 @@ export type ApiErrorCode =
   /** Code à 6 chiffres ou code de secours faux, ou déjà utilisé. */
   | "invalid_code"
   /** Trop de codes faux : réessayer après `retryAfterSeconds`. */
-  | "code_locked";
+  | "code_locked"
+  /** Aucune connexion à GitHub enregistrée : l'installation (/setup) doit être faite d'abord. */
+  | "setup_required";
 
 /**
  * Corps de toute réponse d'erreur. `message` est toujours un texte à nous : un message ou un corps

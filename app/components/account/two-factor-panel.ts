@@ -4,7 +4,7 @@ import type { TwoFactorStatusBody } from "../../../domain/twoFactorContract.ts";
 import { api, ApiError, asLoadError, errorCopy, type LoadState } from "../../services/api-client.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import { errorPanel } from "../empty-state.ts";
 import "../confirm-dialog.ts";
 import "../two-factor/code-field.ts";
@@ -94,7 +94,7 @@ export class AppTwoFactorPanel extends TiniComponent {
                 aria-busy=${this.busy ? "true" : "false"}
                 @click=${this.regenerate}
               >
-                ${this.busy ? shieldLoader(16) : nothing} Create new codes
+                ${this.busy ? brandSpinner(16) : nothing} Create new codes
               </button>
             </div>`}
     </app-confirm-dialog>`;

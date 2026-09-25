@@ -7,12 +7,12 @@ import {
 } from "../../domain/apiContract.ts";
 import { isSameOriginPath } from "../../domain/returnTo.ts";
 import { signInUrl } from "../services/api-client.ts";
+import { forgetOrg } from "../stores/last-org.ts";
 import { ensureSession } from "../stores/session-store.ts";
 import { sharedSheet } from "../styles/shared-sheet.ts";
 import { buttonClass } from "../ui/button-classes.ts";
 import { cn } from "../ui/class-names.ts";
-import { brandMark, wordmark } from "../ui/brand-mark.ts";
-import { shieldLoader } from "../ui/shield-loader.ts";
+import { brandMark, brandSpinner, wordmark } from "../ui/brand-mark.ts";
 
 const ERROR_MESSAGES: Record<LoginErrorCode, string> = {
   expired: "The sign-in took too long or was interrupted. Please try again.",
@@ -66,10 +66,15 @@ export class AppPageLogin extends TiniComponent implements OnBeforeEnter {
   /**
    * Déjà connecté : on va directement à la destination. ÉCHEC OUVERT si le serveur ne répond pas :
    * on affiche simplement la page de connexion, qui ne donne accès à rien.
+   * Toute fin de session passe par ici (déconnexion, effacement, session expirée ou fermée ailleurs) :
+   * sans session, l'organisation retenue est oubliée — la personne suivante sur ce navigateur ne la
+   * verra pas.
    */
   async onBeforeEnter(): Promise<string | undefined> {
     const session = await ensureSession().catch(() => null);
-    return session ? requestedReturnTo() : undefined;
+    if (session) return requestedReturnTo();
+    forgetOrg();
+    return undefined;
   }
 
   protected override render() {
@@ -110,7 +115,7 @@ export class AppPageLogin extends TiniComponent implements OnBeforeEnter {
             class=${cn(buttonClass({ size: "lg" }), "mt-7 w-full")}
             @click=${this.onSignIn}
           >
-            ${this.redirecting ? shieldLoader(16) : nothing} Sign in with GitHub
+            ${this.redirecting ? brandSpinner(16) : nothing} Sign in with GitHub
           </a>
           <p class="mt-4 text-2xs text-text-tertiary">
             Only organizations where the GitHub App is installed will appear.

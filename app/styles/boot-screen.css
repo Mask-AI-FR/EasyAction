@@ -1,0 +1,60 @@
+/*
+ * Écran de démarrage (`#boot-screen`, app/index.html) : visible dès le premier affichage, avant que
+ * l'application ne soit chargée ; `app/app.ts` le retire quand la première page est prête. Les styles
+ * sont ici parce que la CSP bloque les styles en ligne. Couleurs et polices : jetons MASKAI (la couche
+ * de marque EasyActions s'y applique) ; le logo garde ses propres couleurs, comme app/ui/brand-mark.ts.
+ */
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1rem;
+  background: var(--background);
+}
+
+.boot-screen .boot-gear {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: boot-gear-turn 1.6s linear infinite;
+}
+
+.boot-screen .boot-name {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.boot-screen .boot-easy {
+  color: var(--text-brand);
+}
+
+.boot-screen .boot-actions {
+  color: var(--primary-text);
+}
+
+/* Texte pour les lecteurs d'écran seulement (même recette que `sr-only`). */
+.boot-screen .boot-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes boot-gear-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-screen .boot-gear {
+    animation: none;
+  }
+}

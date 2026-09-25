@@ -5,7 +5,7 @@ import { StoreController } from "../stores/store-controller.ts";
 import { dismissToast, toastStore, type Toast, type ToastTone } from "../stores/toast-store.ts";
 import { sharedSheet } from "../styles/shared-sheet.ts";
 import { cn } from "../ui/class-names.ts";
-import { shieldLoader } from "../ui/shield-loader.ts";
+import { brandSpinner } from "../ui/brand-mark.ts";
 
 /** Toasts visibles à la fois (`visibleToasts={4}` de l'original). */
 const VISIBLE_TOASTS = 4;
@@ -35,7 +35,7 @@ const ICON_PATH: Record<IconTone, string> = {
 };
 
 function toneIcon(tone: ToastTone) {
-  if (tone === "loading") return shieldLoader(16, "mt-0.5 text-primary-text");
+  if (tone === "loading") return brandSpinner(16, "mt-0.5 text-primary-text");
   return html`<svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class=${cn("mt-0.5 size-4 shrink-0", ICON_CLASS[tone])}>
     <path d=${ICON_PATH[tone]} stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
   </svg>`;

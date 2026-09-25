@@ -8,7 +8,7 @@ import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
 import { cn } from "../../ui/class-names.ts";
 import { BADGE_CLASS, BADGE_TONE } from "../../ui/field-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import { errorPanel } from "../empty-state.ts";
 
 /** Dates complètes (pas de « il y a 3 jours ») : on compare des sessions entre elles. */
@@ -62,7 +62,7 @@ export class AppSessionList extends TiniComponent {
           aria-busy=${this.busy === "others" ? "true" : "false"}
           @click=${this.signOutOthers}
         >
-          ${this.busy === "others" ? shieldLoader(16) : nothing} Sign out other sessions
+          ${this.busy === "others" ? brandSpinner(16) : nothing} Sign out other sessions
         </button>
         <button
           type="button"
@@ -71,7 +71,7 @@ export class AppSessionList extends TiniComponent {
           aria-busy=${this.busy === "all" ? "true" : "false"}
           @click=${this.signOutEverywhere}
         >
-          ${this.busy === "all" ? shieldLoader(16) : nothing} Sign out everywhere
+          ${this.busy === "all" ? brandSpinner(16) : nothing} Sign out everywhere
         </button>
       </div>
     `;

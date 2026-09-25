@@ -5,12 +5,13 @@ import { apiUrlFor } from "../../../domain/githubHosts.ts";
 import { GITHUB_FIELDS, type GitHubFieldDefinition, type GitHubSettingKey } from "../../../domain/settingsCatalog.ts";
 import type { GitHubConnectionView } from "../../../domain/settingsContract.ts";
 import { api, ApiError, errorCopy } from "../../services/api-client.ts";
+import { forgetSession } from "../../stores/session-store.ts";
 import { showToast } from "../../stores/toast-store.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
 import { cn } from "../../ui/class-names.ts";
 import { INPUT_CLASS } from "../../ui/field-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import "./code-dialog.ts";
 
 interface Draft {
@@ -74,7 +75,7 @@ export class AppGitHubConnectionForm extends TiniComponent {
         : nothing}
       <div class="mt-5 flex flex-wrap gap-2">
         <button type="button" class=${buttonClass({ variant: "outline" })} ?disabled=${this.testing} @click=${this.test}>
-          ${this.testing ? shieldLoader(16) : nothing} Test connection
+          ${this.testing ? brandSpinner(16) : nothing} Test connection
         </button>
         <button type="button" class=${buttonClass()} ?disabled=${!this.complete()} @click=${() => (this.confirming = true)}>
           Save connection
@@ -142,6 +143,7 @@ export class AppGitHubConnectionForm extends TiniComponent {
       const { webUrl, apiUrl, clientId, clientSecret } = this.draft;
       const saved = await api.admin.saveConnection({ webUrl: webUrl.trim(), apiUrl: apiUrl.trim(), clientId: clientId.trim(), clientSecret, code });
       if (saved.signedEveryoneOut) {
+        forgetSession();
         location.assign("/login");
         return;
       }

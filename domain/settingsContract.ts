@@ -1,15 +1,15 @@
 import type { LimitSettingKey, LimitValues } from "./settingsCatalog.ts";
 
 /**
- * Contrat de `/api/admin/settings/*` (administrateurs). Le secret de l'app GitHub n'en sort JAMAIS :
- * seulement le fait qu'il est enregistré.
+ * Contrat de `/api/admin/settings/*` (administrateurs) et de `/api/setup/*` (installation). Le secret de
+ * l'app GitHub n'en sort JAMAIS : seulement le fait qu'il est enregistré.
  */
 export interface GitHubConnectionView {
   readonly webUrl: string;
   readonly apiUrl: string;
   readonly clientId: string;
   readonly clientSecretSet: boolean;
-  /** Dernière modification (ISO 8601, UTC), ou `null` si elle vient de l'import depuis `.env`. */
+  /** Dernière modification par un administrateur (ISO 8601, UTC), ou `null` (installation, ancien import). */
   readonly updatedAt: string | null;
 }
 
@@ -51,4 +51,23 @@ export interface GitHubConnectionUpdateRequest {
 export interface GitHubConnectionSavedBody {
   /** Vrai : toutes les sessions ont été fermées (celle-ci comprise), il faut se reconnecter. */
   readonly signedEveryoneOut: boolean;
+}
+
+/** `GET /api/setup` : le serveur attend-il son installation (aucune connexion à GitHub lisible) ? */
+export interface SetupStatusBody {
+  readonly required: boolean;
+}
+
+/** `POST /api/setup/test` : comme le test de la page Settings, mais ouvert par le code d'installation. */
+export interface SetupTestRequest extends ConnectionTestRequest {
+  readonly setupCode: string;
+}
+
+/** `POST /api/setup/github` : la connexion complète et le code d'installation (`bun run settings:setup-code`). */
+export interface SetupConnectionRequest {
+  readonly setupCode: string;
+  readonly webUrl: string;
+  readonly apiUrl: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
 }

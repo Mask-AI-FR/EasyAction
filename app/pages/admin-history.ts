@@ -26,6 +26,8 @@ const LABELS: Record<AuditAction, string> = {
   "settings.update": "Changed limits",
   "settings.github_update": "Changed the GitHub connection",
   "settings.import": "Imported settings from .env",
+  "settings.setup": "Set up the GitHub connection (setup page)",
+  "settings.reset": "Cleared the GitHub connection (server command)",
   "user.role_change": "Changed a role",
   "user.sign_out": "Signed someone out",
   "user.remove": "Deleted someone",

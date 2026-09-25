@@ -34,10 +34,8 @@ export function writeSettings(db: Database, entries: readonly (readonly [string,
   for (const [key, value] of entries) upsert.run({ key, value, now, actorId });
 }
 
-/** N'écrit que les réglages absents ; rend les clés écrites (import depuis `.env`, sans écraser le site). */
-export function insertMissingSettings(db: Database, entries: readonly (readonly [string, string])[], now: number): string[] {
-  const insert = db.query<{ key: string }, { key: string; value: string; now: number }>(
-    "INSERT INTO settings (key, value, updated_at) VALUES ($key, $value, $now) ON CONFLICT (key) DO NOTHING RETURNING key",
-  );
-  return entries.flatMap(([key, value]) => insert.all({ key, value, now }).map((row) => row.key));
+/** Efface des réglages (connexion à GitHub remise à zéro par `bun run settings:setup-code --reset`). */
+export function deleteSettings(db: Database, keys: readonly string[]): void {
+  const remove = db.query("DELETE FROM settings WHERE key = $key");
+  for (const key of keys) remove.run({ key });
 }

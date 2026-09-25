@@ -141,7 +141,7 @@ export class AppPageAdminUsers extends TiniComponent {
     try {
       await this.send(pending.action, pending.user.githubId, code);
       if (pending.action === "demote" && pending.user.login === sessionStore.session?.user.login) {
-        // Plus administrateur : rechargement complet, pour que l'en-tête perde son lien Settings.
+        // Plus administrateur : rechargement complet, pour que la barre latérale perde sa section Administration.
         location.assign("/orgs");
         return;
       }

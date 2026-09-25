@@ -12,7 +12,7 @@ import { StoreController } from "../../stores/store-controller.ts";
 import { showToast, updateToast, type ToastContent } from "../../stores/toast-store.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import "./dispatch-confirm.ts";
 
 /** Lectures simultanées de workflows avant un lancement : borne la rafale d'appels à GitHub. */
@@ -139,7 +139,7 @@ export class AppBulkActionBar extends TiniComponent {
           aria-busy=${busy ? "true" : "false"}
           @click=${() => void this.prepare()}
         >
-          ${this.phase === "resolving" ? shieldLoader(16) : nothing} Run pipelines
+          ${this.phase === "resolving" ? brandSpinner(16) : nothing} Run pipelines
         </button>
       </div>
     `;

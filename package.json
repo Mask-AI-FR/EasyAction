@@ -14,7 +14,7 @@
     "users:promote": "bun scripts/users.ts promote",
     "users:demote": "bun scripts/users.ts demote",
     "users:reset-two-factor": "bun scripts/users.ts reset-two-factor",
-    "settings:import-env": "bun scripts/settings.ts import-env",
+    "settings:setup-code": "bun scripts/settings.ts setup-code",
     "typecheck": "bun --bun tsc --noEmit -p . && bun --bun tsc --noEmit -p app",
     "test": "bun test"
   },

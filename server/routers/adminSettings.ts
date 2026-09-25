@@ -38,8 +38,8 @@ async function putLimits(c: AdminContext, deps: AuthDeps): Promise<SettingsBody>
   return settingsBodyOf(deps.sessions.db);
 }
 
-/** L'adresse d'API doit aller avec l'adresse web : sinon, dire laquelle est attendue. */
-function ensurePaired(webUrl: string, apiUrl: string): void {
+/** L'adresse d'API doit aller avec l'adresse web : sinon, dire laquelle est attendue (aussi pour /api/setup). */
+export function ensurePaired(webUrl: string, apiUrl: string): void {
   if (!isPairedApiUrl(webUrl, apiUrl)) {
     throw new HttpError(400, "bad_request", `The API address must be ${apiUrlFor(webUrl) ?? "the one of the GitHub address"}`);
   }
@@ -51,11 +51,16 @@ const PROBLEMS: Record<ConnectionProblem, string> = {
   not_github: "This address does not answer like a GitHub API.",
 };
 
+/** Le test de connexion (`GET {api}/meta`, aucun jeton), avec un message pour la page (aussi pour /api/setup). */
+export async function connectionTestOf(apiUrl: string, timeoutMs: number): Promise<ConnectionTestBody> {
+  const problem = await testGitHubApi(apiUrl, timeoutMs);
+  return problem ? { ok: false, message: PROBLEMS[problem] } : { ok: true, message: "GitHub answers at this address." };
+}
+
 async function testConnection(c: AdminContext, deps: AuthDeps): Promise<ConnectionTestBody> {
   const { webUrl, apiUrl } = await parseJsonBody(c, ConnectionTestRequest);
   ensurePaired(webUrl, apiUrl);
-  const problem = await testGitHubApi(apiUrl, deps.settings().github.timeoutMs);
-  return problem ? { ok: false, message: PROBLEMS[problem] } : { ok: true, message: "GitHub answers at this address." };
+  return connectionTestOf(apiUrl, deps.settings().github.timeoutMs);
 }
 
 /**
@@ -70,8 +75,8 @@ async function saveConnection(c: AdminContext, deps: AuthDeps): Promise<Response
   ensurePaired(input.webUrl, input.apiUrl);
   checkStepUpCode(deps.twoFactor, session, input.code);
   const previous = deps.settings().github;
-  const problem = await testGitHubApi(input.apiUrl, previous.timeoutMs);
-  if (problem) throw new HttpError(400, "bad_request", PROBLEMS[problem]);
+  const test = await connectionTestOf(input.apiUrl, previous.timeoutMs);
+  if (!test.ok) throw new HttpError(400, "bad_request", test.message);
   const { code: _code, ...connection } = input;
   const { changedIdentity } = saveGitHubConnection(deps.sessions.db, deps.sessions.dataKey, connection, session.userId);
   deps.dashboard.clear();

@@ -5,7 +5,7 @@ import { api, ApiError, errorCopy } from "../../services/api-client.ts";
 import { showToast } from "../../stores/toast-store.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
-import { shieldLoader } from "../../ui/shield-loader.ts";
+import { brandSpinner } from "../../ui/brand-mark.ts";
 import "./setting-field.ts";
 
 /**
@@ -49,7 +49,7 @@ export class AppLimitsForm extends TiniComponent {
           aria-busy=${this.busy ? "true" : "false"}
           @click=${this.save}
         >
-          ${this.busy ? shieldLoader(16) : nothing} Save limits
+          ${this.busy ? brandSpinner(16) : nothing} Save limits
         </button>
         <button type="button" class=${buttonClass({ variant: "ghost" })} ?disabled=${changed === 0 || this.busy} @click=${this.reset}>
           Cancel changes

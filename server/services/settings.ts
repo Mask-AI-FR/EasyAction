@@ -1,11 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { isPairedApiUrl } from "../../domain/githubHosts.ts";
-import { defaultLimits, LIMIT_SETTINGS, type LimitSettingKey, type LimitValues } from "../../domain/settingsCatalog.ts";
+import { defaultLimits, GITHUB_SETTING_KEYS, LIMIT_SETTINGS, type LimitSettingKey, type LimitValues } from "../../domain/settingsCatalog.ts";
 import type { SettingsBody } from "../../domain/settingsContract.ts";
 import type { GitHubSettings, Limits } from "../config/env.ts";
 import { recordAuditEvent } from "../repositories/auditEvents.ts";
 import { deleteSessions } from "../repositories/sessions.ts";
-import { insertMissingSettings, readAllSettings, writeSettings } from "../repositories/settings.ts";
+import { deleteSettings, readAllSettings, writeSettings } from "../repositories/settings.ts";
 import { DataCipherError, openValue, sealValue } from "../security/dataCipher.ts";
 
 /**
@@ -112,79 +112,80 @@ export function updateLimits(db: Database, values: Partial<Record<LimitSettingKe
   })();
 }
 
+/** Les quatre réglages de la connexion, le secret chiffré (refus d'une paire d'adresses qui ne va pas). */
+function connectionEntries(dataKey: Uint8Array, connection: GitHubConnection): (readonly [string, string])[] {
+  if (!isPairedApiUrl(connection.webUrl, connection.apiUrl)) throw new Error("Unpaired GitHub addresses");
+  const sealed = sealValue(dataKey, "settings.github_client_secret", SECRET_KEY, connection.clientSecret);
+  return [["githubWebUrl", connection.webUrl], ["githubApiUrl", connection.apiUrl], ["githubClientId", connection.clientId], [SECRET_KEY, sealed]];
+}
+
 /**
- * Enregistre la connexion à GitHub (déjà validée : https, paire web/API, test de connexion passé).
- * Rend `changedIdentity` : l'adresse ou l'identifiant de l'app a changé — les jetons délivrés par
- * l'ancienne app ne valent plus rien ici, l'appelant ferme alors toutes les sessions.
+ * Enregistre la connexion à GitHub depuis la page Settings (déjà validée : https, paire web/API, test de
+ * connexion passé). Rend `changedIdentity` : l'adresse ou l'identifiant de l'app a changé — les jetons
+ * délivrés par l'ancienne app ne valent plus rien ici, l'appelant ferme alors toutes les sessions.
  */
 export function saveGitHubConnection(
   db: Database,
   dataKey: Uint8Array,
   connection: GitHubConnection,
-  actorId: number | null,
+  actorId: number,
 ): { readonly changedIdentity: boolean } {
-  if (!isPairedApiUrl(connection.webUrl, connection.apiUrl)) throw new Error("Unpaired GitHub addresses");
+  const entries = connectionEntries(dataKey, connection);
   const rows = readAllSettings(db);
   const changed = identityChanges(rows, connection);
-  const sealed = sealValue(dataKey, "settings.github_client_secret", SECRET_KEY, connection.clientSecret);
   db.transaction(() => {
-    writeSettings(
-      db,
-      [["githubWebUrl", connection.webUrl], ["githubApiUrl", connection.apiUrl], ["githubClientId", connection.clientId], [SECRET_KEY, sealed]],
-      actorId,
-      nowSeconds(),
-    );
+    writeSettings(db, entries, actorId, nowSeconds());
     recordAuditEvent(db, { action: "settings.github_update", actorId, targetId: null, keys: [...changed, SECRET_KEY] }, nowSeconds());
   })();
   return { changedIdentity: changed.length > 0 && rows.has("githubWebUrl") };
 }
 
 /**
- * Import depuis `.env` (`bun run settings:import-env`) : n'écrit que les réglages ABSENTS, sauf
- * `replace` (récupération après un changement de clé, ou une connexion cassée). Rend les clés écrites.
- * `replace` vers une autre app ou un autre hôte ferme toutes les sessions, comme la page Settings, dans
- * la même transaction ; sans révocation (hors ligne, et l'ancienne connexion est peut-être la cassée) :
- * nos seules copies des jetons sont effacées, et les jetons d'accès expirent dans les 8 heures.
+ * Enregistre la connexion saisie sur la page d'installation, en une transaction : les quatre réglages,
+ * l'historique (`settings.setup`, sans auteur : ouvert par un code du serveur), et la fermeture de toute
+ * session restante. En installation, aucune ne peut servir, et ses jetons viendraient d'une autre app :
+ * ils ne doivent jamais partir vers la nouvelle adresse.
  */
-export function importSettings(
-  db: Database,
-  dataKey: Uint8Array,
-  input: { readonly github: GitHubConnection | null; readonly limits: Partial<Record<LimitSettingKey, number>> },
-  replace: boolean,
-): { readonly written: string[]; readonly signedEveryoneOut: boolean } {
-  const entries: (readonly [string, string])[] = Object.entries(input.limits).map(([key, value]) => [key, String(value)] as const);
-  if (input.github) {
-    const secret = sealValue(dataKey, "settings.github_client_secret", SECRET_KEY, input.github.clientSecret);
-    entries.push(["githubWebUrl", input.github.webUrl], ["githubApiUrl", input.github.apiUrl], ["githubClientId", input.github.clientId], [SECRET_KEY, secret]);
-  }
-  return db.transaction(() => {
+export function completeSetup(db: Database, dataKey: Uint8Array, connection: GitHubConnection): void {
+  const entries = connectionEntries(dataKey, connection);
+  db.transaction(() => {
     const now = nowSeconds();
-    const rows = readAllSettings(db);
-    const signedEveryoneOut = replace && input.github !== null && rows.has("githubWebUrl") && identityChanges(rows, input.github).length > 0;
-    const written = replace ? entries.map(([key]) => key) : insertMissingSettings(db, entries, now);
-    if (replace) writeSettings(db, entries, null, now);
-    if (written.length > 0) recordAuditEvent(db, { action: "settings.import", actorId: null, targetId: null, keys: written }, now);
-    if (signedEveryoneOut) {
-      deleteSessions(db, { all: true });
-      recordAuditEvent(db, { action: "session.end_all", actorId: null, targetId: null }, now);
-    }
-    return { written, signedEveryoneOut };
+    writeSettings(db, entries, null, now);
+    recordAuditEvent(db, { action: "settings.setup", actorId: null, targetId: null, keys: entries.map(([key]) => key) }, now);
+    const ended = deleteSessions(db, { all: true });
+    if (ended.length > 0) recordAuditEvent(db, { action: "session.end_all", actorId: null, targetId: null }, now);
   })();
 }
 
 /**
- * ÉCHEC FERMÉ AU DÉMARRAGE : sans connexion à GitHub en base, le serveur refuse de démarrer et dit
- * quoi faire (les noms seulement, jamais une valeur).
+ * Vrai si une connexion à GitHub est enregistrée ET lisible. Sinon, le serveur est en mode installation
+ * (`server/middleware/setupGate.ts`) : première installation, connexion effacée, ou secret illisible
+ * après un changement de DATA_ENCRYPTION_KEY.
  */
-export function assertSettingsReady(db: Database, dataKey: Uint8Array): void {
+export function isConfigured(db: Database, dataKey: Uint8Array): boolean {
   try {
     readSettings(db, dataKey);
+    return true;
   } catch (err) {
     if (!(err instanceof SettingsMissingError)) throw err;
-    throw new Error(
-      `Pipliner refuse de démarrer : la connexion à GitHub n'est pas configurée (${err.missing.join(", ")}). ` +
-        "Mettez GITHUB_WEB_URL, GITHUB_API_URL, GITHUB_APP_CLIENT_ID et GITHUB_APP_CLIENT_SECRET dans .env, " +
-        "puis lancez `bun run settings:import-env` (ajoutez `--replace` si la clé de chiffrement a changé).",
-    );
+    return false;
   }
+}
+
+/**
+ * Efface la connexion à GitHub (`bun run settings:setup-code --reset`) : le serveur repasse en mode
+ * installation. Toutes les sessions sont fermées dans la même transaction — leurs jetons viennent de
+ * l'app effacée — sans révocation (hors ligne, et la connexion effacée est peut-être la cassée) : nos
+ * seules copies sont effacées, et les jetons d'accès expirent dans les 8 heures. Rend le nombre de
+ * sessions fermées.
+ */
+export function clearGitHubConnection(db: Database): number {
+  return db.transaction(() => {
+    const now = nowSeconds();
+    deleteSettings(db, GITHUB_SETTING_KEYS);
+    recordAuditEvent(db, { action: "settings.reset", actorId: null, targetId: null, keys: [...GITHUB_SETTING_KEYS] }, now);
+    const ended = deleteSessions(db, { all: true });
+    if (ended.length > 0) recordAuditEvent(db, { action: "session.end_all", actorId: null, targetId: null }, now);
+    return ended.length;
+  })();
 }

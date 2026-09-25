@@ -41,6 +41,14 @@ export function deriveRecoveryCodeKey(secret: string): Uint8Array {
   return new Uint8Array(hkdfSync("sha256", secret, "", "pipliner:recovery-codes:v1", 32));
 }
 
+/**
+ * Clé HMAC des codes d'installation (`server/auth/setupCode.ts`), elle aussi à part : un code
+ * d'installation ne peut être fabriqué qu'avec le secret du serveur.
+ */
+export function deriveSetupCodeKey(secret: string): Uint8Array {
+  return new Uint8Array(hkdfSync("sha256", secret, "", "pipliner:setup-code:v1", 32));
+}
+
 function associatedData(purpose: SealedPurpose, rowKey: string): Buffer {
   return Buffer.from(`${purpose}:${rowKey}`, "utf8");
 }

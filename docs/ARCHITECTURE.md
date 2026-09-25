@@ -128,6 +128,7 @@ Browser ── same origin ──▶ one Bun process
 | `POST /auth/logout` | closes this browser's session (database and cookie), revokes its GitHub token, `204`; needs the app's `Origin` |
 | `GET /api/session` | `200 {"user":{"login","avatarUrl","role"},"secondFactor","expiresAt","limits":{"dispatchMaxTargets","runPollMinSeconds","runTrackMaxMinutes"}}` or `401`; `secondFactor` = `setup`, `verify` or `verified`; `expiresAt` = end of the session; never a token |
 | every other `/api/*` | `403 second_factor_required` until today's code is given (only the five routes of [SECURITY.md §4](SECURITY.md#4-the-daily-code-two-step-verification-m6) are open before it) |
+| `GET /api/setup` · `POST /api/setup/test` · `POST /api/setup/github` | no session: `{required}`; with a setup code from `bun run settings:setup-code`, test then save the GitHub connection (`204`); `404` once set up. Without a connection every other `/api/*` answers `503 setup_required` ([SECURITY.md §7](SECURITY.md#7-settings-and-administration-m7)) |
 | `GET /api/account/two-factor` | `{enabled, confirmedAt, recoveryCodesLeft}` (`domain/twoFactorContract.ts`) |
 | `POST /api/account/two-factor/enrollment` | body `{code?}` (a current code, required to *change* app): new pending secret, `{manualKey, issuer, account}` |
 | `GET /api/account/two-factor/enrollment/qr.svg` | the pending secret as a QR code (`image/svg+xml`, `no-store`); `404` without a setup in progress |
@@ -160,7 +161,7 @@ own text. GitHub failures map to `401 unauthorized` (token revoked or expired: t
 back to sign-in), `403 forbidden`, `403 sso_required` (+ `ssoUrl`), `404 not_found`, `429 rate_limited`
 (+ `retryAfterSeconds` and `Retry-After`), `422 unprocessable`, `502 upstream`. Sign-in failures use the
 codes `expired`, `denied`, `github`, `config`, `unavailable`, `ended`, shown as English messages by the
-sign-in page. Web app routes: `/` and `/login` (sign-in), `/orgs` (organization picker),
+sign-in page. Web app routes: `/` and `/login` (sign-in), `/setup` (first setup), `/orgs` (organizations),
 `/orgs/:org/dashboard?days=` (the organization's first tab),
 `/orgs/:org?q=&visibility=&language=&archived=1&sort=name&page=` (repositories), `/account` (your
 sessions, daily code and data, same layout as `/orgs`), `/two-factor?returnTo=&mode=change` (set up the
@@ -174,7 +175,8 @@ Since M5, Pipliner owns one SQLite database and is its only writer: tables `user
 tokens encrypted), `audit_events` (the history), `second_factors`, `recovery_codes` and `settings`. Every query lives in `server/repositories/`; the
 schema changes only through `server/db/migrations/` and `bun run db:migrate`. What each table holds,
 how it is erased and exported, and the file's protection: [SECURITY.md §1–§2](SECURITY.md#1-what-easyactions-stores).
-The browser holds only the session cookie (a random id). The web app keeps its selection, the runs it
+The browser holds the session cookie (a random id) and one preference, the last organization opened
+(`app/stores/last-org.ts`, deleted when the session ends). The web app keeps its selection, the runs it
 follows and a 60-second read cache in memory only: a reload clears them, and sign-out reloads the page
 (`app/layouts/dashboard.ts`), so no timer keeps polling for a session that has ended.
 
@@ -182,9 +184,8 @@ follows and a 60-second read cache in memory only: a reload clears them, and sig
 
 Declared in `.env.example`; Bun loads a local `.env` automatically. The variables below are required:
 `server/config/env.ts` stops the boot and lists every missing, placeholder (`<TO_PROVIDE>`) or invalid
-**name** — never a value. Since M7 the GitHub connection and the limits are **website settings**, in
-the database ([SECURITY.md §7](SECURITY.md#7-settings-and-administration-m7)); `.env` keeps them only
-for `bun run settings:import-env`.
+**name** — never a value. The GitHub connection and the limits are **website settings**, in the
+database, never in `.env`: entered on `/setup`, then on the Settings page ([SECURITY.md §7](SECURITY.md#7-settings-and-administration-m7)).
 
 | Variable | Purpose |
 |---|---|
@@ -201,7 +202,6 @@ for `bun run settings:import-env`.
 | `TWO_FACTOR_EVERY_HOURS` | hours an accepted 6-digit code stays valid for a browser (24 = daily), 1–168 |
 | `TWO_FACTOR_MAX_ATTEMPTS` | wrong codes before a lock, 3–20 |
 | `TWO_FACTOR_LOCK_MINUTES` | first lock in minutes, doubled at each next lock (24 h at most), 1–1440 |
-| Import only: `GITHUB_WEB_URL`, `GITHUB_API_URL`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_TIMEOUT_MS`, `REPOS_MAX`, `BRANCHES_MAX`, `ACTIVE_BRANCH_DAYS`, `DISPATCH_MAX_TARGETS`, `DISPATCH_CONCURRENCY`, `RUN_POLL_MIN_SECONDS`, `RUN_TRACK_MAX_MINUTES` | read only by `bun run settings:import-env` (`scripts/settings.ts`); ranges and defaults: `domain/settingsCatalog.ts` |
 
 ## 7. Failure directions (implemented)
 
@@ -209,7 +209,7 @@ for `bun run settings:import-env`.
 |---|---|---|
 | Required variable missing, placeholder or invalid | **Closed at boot**, all names listed | `server/config/env.ts` |
 | Database file missing, or its schema not at this code's version | **Closed at boot**, with the command to run (`bun run db:migrate`) | `server/db/database.ts` |
-| GitHub connection missing from the database, or its secret unreadable | **Closed at boot**, naming `bun run settings:import-env` | `server/services/settings.ts` |
+| GitHub connection missing from the database, or its secret unreadable | **Closed** for every feature: setup mode, only `/setup` with a server-issued code | `server/middleware/setupGate.ts`, `server/routers/setup.ts` |
 | Admin pages and actions: not an admin, no current code, invalid settings, last admin | **Closed**, see [SECURITY.md §7](SECURITY.md#7-settings-and-administration-m7) | `server/middleware/admin.ts`, `server/routers/admin*.ts` |
 | `dist/app/index.html` missing in production | **Closed at boot** (`bun run build` first) | `server/index.ts` |
 | Unexpected error in a handler | **Closed**: generic 500; logged by `errName`/`errCode` only | `server/exceptions/errorHandler.ts` |
@@ -229,7 +229,7 @@ for `bun run settings:import-env`.
 | GitHub rate limit, SSO, refusal, outage or malformed answer | **Closed**: a stable error code; the page shows an explanation, "Try again", and the SSO link when there is one — never stale or partial data (one written exception: the dashboard, below) | `server/adapters/githubApi.ts`, `app/components/empty-state.ts` |
 | Dashboard: one repository unreadable or not read in time, a limit reached | **Open**, each gap named, no comparison; list failure, rate limit, refused token: **closed** ([DASHBOARD.md §5](DASHBOARD.md#5-partial-data--a-written-exception)) | `server/services/dashboardCollector.ts` |
 | A `Link` "next page" pointing to another host | **Closed**: not followed (the token never leaves our GitHub) | `server/adapters/githubApi.ts` |
-| Organization list fails in the header switcher | **Open**: the switcher shows the current organization only; `/orgs` shows the error | `app/layouts/dashboard.ts` |
+| Organization list fails in the sidebar switcher; browser storage refused | **Open**: the switcher shows the current organization only (`/orgs` shows the error); without storage nothing is remembered and the first organization is selected | `app/layouts/dashboard.ts`, `app/stores/last-org.ts` |
 | Browser cannot check the session (server down) on a signed-in page | **Closed**: to sign-in with `error=unavailable` | `app/layouts/dashboard.ts` |
 | Same, on the sign-in page itself | **Open**: the sign-in page is shown (it grants nothing) | `app/pages/login.ts` |
 | Sign-out request fails | **Closed**: stays signed in, shows "Sign-out failed" | `app/layouts/dashboard.ts` |
@@ -261,7 +261,7 @@ maintainer accepted copying them here:
   `format('woff2-variations')` into invalid CSS and the browser silently drops them (same finding as
   `MaskAILawyer-AnalyzerAudioService/test-app/src/fonts.css`).
 - The shadcn/React primitives cannot run in Lit, so their class recipes are **ported** with a source
-  note: `app/ui/class-names.ts` (`cn`), `app/ui/button-classes.ts`, `app/ui/shield-loader.ts`,
+  note: `app/ui/class-names.ts` (`cn`), `app/ui/button-classes.ts`,
   `app/ui/field-classes.ts` (input, select, checkbox, badge on native elements),
   `app/ui/table-classes.ts` (the table recipe on an ARIA grid of `div`s, because every repository row
   is a component and a `<table>` does not accept custom elements between its rows),
@@ -281,8 +281,10 @@ maintainer accepted copying them here:
   logo's deep emerald (`#047857`), not its bright green: white text on `#22C55E` is 2.28:1, under AA.
   "In progress" badges stay blue through `--run-text`, a token of this layer, so that a running pipeline
   never reads as "Success". `tests/unit/theme.test.ts` checks every pair against WCAG AA in both themes.
-  The logo drawn in the header and on the sign-in page is `app/ui/brand-mark.ts` (paths copied from the
-  v2 pack; the 16–32 px drawing below 33 px).
+  The logo drawn in the sidebar and on the sign-in page is `app/ui/brand-mark.ts` (paths copied from the
+  v2 pack; the 16–32 px drawing below 33 px). Its gear turning is the only loading indicator:
+  `brandLoader` (page waits), `brandSpinner` (buttons, toasts), and the start screen of `app/index.html`
+  (same gear path, checked by `tests/unit/bootScreen.test.ts`; styles in `app/styles/boot-screen.css`).
 
 ## 10. TiniJS — containment and known quirks
 
@@ -341,9 +343,8 @@ New GitHub App — or under the organization's settings):
 
 **2. Local configuration** — create `.env` from the template (Bun loads it at start; it is git-ignored,
 never commit it), then open it in an editor and replace every `<TO_PROVIDE>`: `SESSION_SECRET` and
-`DATA_ENCRYPTION_KEY` each with a different output of `openssl rand -base64 32`,
-`GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET` with the app's values. Then create the database
-(`db:migrate` again after every upgrade, with the server stopped) and copy the GitHub connection into it:
+`DATA_ENCRYPTION_KEY` each with a different output of `openssl rand -base64 32`. Then create the
+database (again after every upgrade, with the server stopped) and get a setup code:
 
 ```bash
 bun install --frozen-lockfile
@@ -351,11 +352,11 @@ cp .env.example .env
 openssl rand -base64 32
 openssl rand -base64 32
 bun run db:migrate
-bun run settings:import-env
+bun run settings:setup-code
 ```
 
-After your first sign-in, make yourself the first admin (replace the login with yours):
-`bun run users:promote your-github-login`.
+Start the server (step 3) and open it: it shows `/setup`. Type the code, the GitHub address, the app's
+client ID and secret. After your first sign-in, make yourself admin: `bun run users:promote your-github-login`.
 
 `bun run db:status` tells whether the database is ready; `bun run db:rollback` removes the last
 migration (it asks for `--yes` when that deletes data — back up the file first).

@@ -4,13 +4,12 @@ import { Page, Reactive, TiniComponent } from "@tinijs/core";
 import type { OnBeforeEnter } from "@tinijs/router";
 import { isSameOriginPath } from "../../domain/returnTo.ts";
 import { api, ApiError, errorCopy } from "../services/api-client.ts";
-import { ensureSession, sessionStore } from "../stores/session-store.ts";
+import { ensureSession, forgetSession, sessionStore } from "../stores/session-store.ts";
 import { sharedSheet } from "../styles/shared-sheet.ts";
-import { brandMark, wordmark } from "../ui/brand-mark.ts";
+import { brandMark, brandSpinner, wordmark } from "../ui/brand-mark.ts";
 import { buttonClass } from "../ui/button-classes.ts";
 import { cn } from "../ui/class-names.ts";
 import { INPUT_CLASS } from "../ui/field-classes.ts";
-import { shieldLoader } from "../ui/shield-loader.ts";
 import "../components/two-factor/code-field.ts";
 import "../components/two-factor/setup-steps.ts";
 
@@ -117,7 +116,7 @@ export class AppPageTwoFactor extends TiniComponent implements OnBeforeEnter {
           aria-busy=${this.busy ? "true" : "false"}
           @click=${this.verify}
         >
-          ${this.busy ? shieldLoader(16) : nothing} Verify
+          ${this.busy ? brandSpinner(16) : nothing} Verify
         </button>
         <button type="button" class=${buttonClass({ variant: "link", size: "sm" })} @click=${this.toggleRecovery}>
           ${this.useRecovery ? "Use the code from my app" : "Lost your phone? Use a recovery code"}
@@ -185,10 +184,11 @@ export class AppPageTwoFactor extends TiniComponent implements OnBeforeEnter {
     location.assign(requestedReturnTo());
   }
 
-  /** ÉCHEC FERMÉ comme dans l'en-tête : on ne quitte la page qu'une fois la session fermée côté serveur. */
+  /** ÉCHEC FERMÉ comme dans la barre latérale : on ne quitte la page qu'une fois la session fermée côté serveur. */
   private async signOut(): Promise<void> {
     try {
       await api.signOut();
+      forgetSession();
       location.assign("/login");
     } catch (err) {
       if (!(err instanceof ApiError || err instanceof TypeError)) throw err;
