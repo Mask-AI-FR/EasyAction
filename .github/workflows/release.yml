@@ -81,19 +81,37 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building version $VERSION"
 
-      - name: Build the package
+      - name: Build the Debian package
         env:
           DEB_MAINTAINER: ${{ vars.DEB_MAINTAINER || 'Mask-AI-FR <noreply@mask-ai.fr>' }}
         run: ./packaging/build-deb.sh "${{ steps.version.outputs.version }}" amd64
 
-      - name: Check the package installs and starts
+      # L'archive portable couvre TOUTES les distributions : Arch, Fedora, openSUSE… là où dpkg
+      # n'existe pas. C'est elle que le PKGBUILD d'Arch télécharge ensuite.
+      - name: Build the portable archive
+        run: ./packaging/build-tarball.sh "${{ steps.version.outputs.version }}" x64
+
+      - name: Generate the Arch PKGBUILD
+        env:
+          DEB_MAINTAINER: ${{ vars.DEB_MAINTAINER || 'Mask-AI-FR <noreply@mask-ai.fr>' }}
+        run: ./packaging/build-arch.sh "${{ steps.version.outputs.version }}"
+
+      - name: Check the Debian package installs and starts
         run: ./packaging/smoke-deb.sh
 
-      - name: Upload the package
+      - name: Check the portable archive installs and starts
+        run: ./packaging/smoke-tarball.sh "${{ steps.version.outputs.version }}"
+
+      - name: Upload the artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: easyactions-deb-amd64
-          path: dist/deb/*.deb
+          name: easyactions-linux-x64
+          path: |
+            dist/deb/*.deb
+            dist/tarball/*.tar.gz
+            dist/arch/PKGBUILD
+            dist/arch/easyactions-system
+            dist/arch/easyactions.service
           if-no-files-found: error
           retention-days: 7
 
@@ -112,12 +130,16 @@ jobs:
       - name: Download the package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: easyactions-deb-amd64
+          name: easyactions-linux-x64
           path: artifacts
 
-      - name: Checksums
-        working-directory: artifacts
-        run: sha256sum *.deb > SHA256SUMS && cat SHA256SUMS
+      # Les fichiers arrivent dans leurs sous-dossiers (deb/, tarball/, arch/) : on les met à plat,
+      # une Release n'a pas d'arborescence.
+      - name: Flatten and checksum
+        run: |
+          mkdir -p upload
+          find artifacts -type f -exec cp {} upload/ \;
+          cd upload && sha256sum ./* > SHA256SUMS && cat SHA256SUMS
 
       # Publication en DEUX temps : brouillon, versement des fichiers, puis seulement publication.
       # Un versement raté ne laisse jamais une Release visible et incomplète. ÉCHEC FERMÉ.
@@ -133,7 +155,7 @@ jobs:
             --generate-notes \
             --title "$GITHUB_REF_NAME" \
             $PRERELEASE \
-            artifacts/*.deb artifacts/SHA256SUMS
+            upload/*
 
       - name: Publish
         env:

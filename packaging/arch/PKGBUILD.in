@@ -1,0 +1,42 @@
+# Maintainer: @MAINTAINER@
+# Généré par packaging/build-arch.sh : la version et la somme viennent de l'archive publiée, elles ne
+# sont jamais écrites à la main.
+pkgname=easyactions
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc="Run GitHub Actions across a whole organization"
+arch=('x86_64')
+url="https://github.com/Mask-AI-FR/EasyAction"
+license=('LicenseRef-proprietary')
+depends=('curl')
+optdepends=('chromium: open the app in its own window'
+            'brave-browser: open the app in its own window'
+            'google-chrome: open the app in its own window')
+# Les deux derniers fichiers voyagent À CÔTÉ du PKGBUILD : ils ne sont pas dans l'archive, qui est
+# relogeable par utilisateur, alors qu'ici l'installation est à l'échelle du système.
+source=("$url/releases/download/v@VERSION@/easyactions-@VERSION@-linux-x64.tar.gz"
+        'easyactions-system'
+        'easyactions.service')
+sha256sums=('@SHA256@'
+            '@SHA256_ENTRY@'
+            '@SHA256_UNIT@')
+
+package() {
+  cd "$srcdir/easyactions-@VERSION@-linux-x64"
+
+  # Même disposition que le paquet Debian : la charge utile en /opt, un seul point d'entrée en
+  # /usr/bin. Les données restent par utilisateur, sous ~/.local/share (voir lib/easyactions-lib.sh).
+  install -dm755 "$pkgdir/opt/easyactions"
+  cp -r bin lib dist "$pkgdir/opt/easyactions/"
+
+  install -Dm755 "$srcdir/easyactions-system" "$pkgdir/usr/bin/easyactions"
+  install -Dm644 share/applications/easyactions.desktop \
+    "$pkgdir/usr/share/applications/easyactions.desktop"
+  install -Dm644 "$srcdir/easyactions.service" \
+    "$pkgdir/usr/lib/systemd/user/easyactions.service"
+
+  for size in 16 32 48 64 128 192 256 512; do
+    install -Dm644 "share/icons/hicolor/${size}x${size}/apps/easyactions.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/easyactions.png"
+  done
+}

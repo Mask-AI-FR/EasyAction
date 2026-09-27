@@ -10,6 +10,11 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/easyactions
+# Les 13 variables sont TOUTES obligatoires (server/schemas/env.schema.ts:9-23) et le serveur refuse
+# de démarrer sans elles : sans cette ligne l'unité échouerait à chaque fois. Le fichier est écrit au
+# premier `easyactions`. `%h/.config` plutôt que XDG_CONFIG_HOME : systemd ne lit pas l'environnement
+# de la session, et c'est l'emplacement par défaut.
+EnvironmentFile=%h/.config/easyactions/env
 ExecStartPre=/opt/easyactions/bin/easyactions-migrate migrate
 ExecStart=/opt/easyactions/bin/easyactions-server
 Restart=on-failure

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Point d'entrée installé en /usr/bin/easyactions par le paquet Debian.
+set -eu
+INSTALL_DIR=/opt/easyactions
+. "$INSTALL_DIR/lib/easyactions-lib.sh"
+easyactions_main "$@"

@@ -22,25 +22,12 @@ esac
 STAGE="dist/deb/easyactions_${DEB_VERSION}_${ARCH}"
 OUT="dist/deb/easyactions_${DEB_VERSION}_${ARCH}.deb"
 
-echo "==> Guarding the environment variable list"
-bun packaging/check-env-names.ts
-
-echo "==> Building the web application"
-bun run build
-
-echo "==> Compiling the binaries for $BUN_TARGET"
 rm -rf "$STAGE"
-mkdir -p "$STAGE/opt/easyactions/bin" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/DEBIAN" \
-         "$STAGE/usr/lib/systemd/user"
-bun build --compile --target="$BUN_TARGET" server/index.ts    --outfile "$STAGE/opt/easyactions/bin/easyactions-server"
-bun build --compile --target="$BUN_TARGET" scripts/db.ts      --outfile "$STAGE/opt/easyactions/bin/easyactions-migrate"
-bun build --compile --target="$BUN_TARGET" scripts/settings.ts --outfile "$STAGE/opt/easyactions/bin/easyactions-settings"
+mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/lib/systemd/user"
+packaging/build-payload.sh "$STAGE/opt/easyactions" "$BUN_TARGET"
 
 echo "==> Laying out the package"
-cp -r dist/app "$STAGE/opt/easyactions/dist-app"
-mkdir -p "$STAGE/opt/easyactions/dist"
-mv "$STAGE/opt/easyactions/dist-app" "$STAGE/opt/easyactions/dist/app"
-install -m 0755 packaging/deb/easyactions "$STAGE/usr/bin/easyactions"
+install -m 0755 packaging/common/easyactions-system "$STAGE/usr/bin/easyactions"
 install -m 0644 packaging/deb/easyactions.desktop "$STAGE/usr/share/applications/easyactions.desktop"
 install -m 0644 packaging/systemd/easyactions.service "$STAGE/usr/lib/systemd/user/easyactions.service"
 install -m 0755 packaging/deb/postinst "$STAGE/DEBIAN/postinst"

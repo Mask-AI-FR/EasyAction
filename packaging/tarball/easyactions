@@ -1,0 +1,10 @@
+#!/bin/sh
+# Point d'entrée de l'archive portable : l'installation est RELOGEABLE, son dossier est déduit de
+# l'emplacement de ce script (bin/easyactions → la racine de l'archive).
+set -eu
+SELF="$0"
+[ -L "$SELF" ] && SELF="$(readlink -f "$SELF")"
+BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)"
+INSTALL_DIR="$(dirname -- "$BIN_DIR")"
+. "$INSTALL_DIR/lib/easyactions-lib.sh"
+easyactions_main "$@"

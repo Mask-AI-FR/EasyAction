@@ -6,12 +6,36 @@ set -e
 
 if [ "$1" = "configure" ]; then
   if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database -q /usr/share/applications || true
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
   fi
   if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-    gtk-update-icon-cache -q -f /usr/share/icons/hicolor || true
+    gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
   fi
-  echo "EasyActions installed. Launch it from your applications menu, or run: easyactions"
+
+  cat <<'NEXT'
+
+EasyActions is installed. Three steps to get going, as your normal user (not root):
+
+  1. Start it                  easyactions
+     Opens the app in its own window and creates your database on first run.
+
+  2. Connect your GitHub App   easyactions settings:setup-code
+     Prints a code valid for 30 minutes. Type it on the /setup page together
+     with your GitHub App's addresses, client ID and client secret.
+
+  3. Make yourself an admin    easyactions users:promote <your-github-login>
+     Sign in through the app once first, then run this.
+
+Other commands:
+  easyactions db:status                      check the database
+  easyactions settings:setup-code --reset    repoint this install at another GitHub App
+  easyactions stop                           stop the background server
+  easyactions help                           everything else
+  systemctl --user enable --now easyactions  keep the server running across reboots
+
+Your data lives in ~/.local/share/easyactions, your settings in ~/.config/easyactions.
+
+NEXT
 fi
 
 exit 0
