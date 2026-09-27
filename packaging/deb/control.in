@@ -1,0 +1,15 @@
+Package: easyactions
+Version: @VERSION@
+Section: devel
+Priority: optional
+Architecture: @ARCH@
+Depends: @DEPENDS@
+Maintainer: @MAINTAINER@
+Homepage: https://github.com/Mask-AI-FR/EasyAction
+Description: Run GitHub Actions across a whole organization
+ EasyActions is a dashboard for GitHub Actions. Pick an organization, see every
+ repository with its branches and workflows and their live status, trigger
+ workflow_dispatch runs in bulk, and read pipeline and commit statistics.
+ .
+ The package installs a self-contained server and opens it in its own window.
+ Each user gets their own database under ~/.local/share/easyactions.

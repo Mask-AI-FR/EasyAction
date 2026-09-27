@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=EasyActions
+GenericName=GitHub Actions dashboard
+Comment=Run GitHub Actions across a whole organization
+Exec=easyactions
+Icon=easyactions
+Terminal=false
+Categories=Development;
+Keywords=github;actions;ci;workflow;

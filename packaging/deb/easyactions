@@ -1,0 +1,92 @@
+#!/bin/sh
+# Lanceur d'EasyActions installé par le paquet Debian, en /usr/bin/easyactions.
+#
+# Le serveur lit `dist/app` et sa base par des chemins RELATIFS à son dossier de travail
+# (server/index.ts:16, server/app.ts:80-101) : on se place donc dans le dossier d'installation, et on
+# passe la configuration par l'ENVIRONNEMENT plutôt que par un `.env` — le paquet est partagé, la
+# configuration ne l'est pas.
+set -eu
+
+INSTALL_DIR=/opt/easyactions
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/easyactions"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/easyactions"
+ENV_FILE="$CONFIG_DIR/env"
+PID_FILE="$DATA_DIR/easyactions.pid"
+LOG_FILE="$DATA_DIR/server.log"
+
+# Navigateurs Chromium, même ordre que scripts/desktop.ts:17-26 : eux seuls savent ouvrir une
+# application web dans sa propre fenêtre (`--app=`).
+CHROMIUM_BROWSERS="brave brave-browser chromium chromium-browser google-chrome-stable google-chrome microsoft-edge-stable vivaldi-stable"
+
+say() { printf '%s\n' "$1"; }
+
+# PREMIER LANCEMENT. Les deux secrets sont tirés ICI, une fois par installation : livrés dans le
+# paquet, ils seraient identiques partout, donc publics. `/dev/urandom` + base64 évitent de dépendre
+# d'openssl. 32 octets → 44 caractères, au-dessus du minimum de 32 (server/schemas/env.schema.ts:64).
+if [ ! -f "$ENV_FILE" ]; then
+  mkdir -p "$CONFIG_DIR" "$DATA_DIR"
+  chmod 700 "$CONFIG_DIR" "$DATA_DIR"
+  (
+    umask 077
+    cat > "$ENV_FILE" <<ENVEOF
+HOST=127.0.0.1
+PORT=8094
+APP_ORIGIN=http://127.0.0.1:8094
+SESSION_SECRET=$(head -c 32 /dev/urandom | base64)
+DATA_ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+DATABASE_PATH=$DATA_DIR/pipliner.sqlite
+HTTP_IDLE_TIMEOUT_SECONDS=240
+SESSION_MAX_DAYS=30
+SESSIONS_PER_USER_MAX=5
+AUDIT_RETENTION_DAYS=365
+TWO_FACTOR_EVERY_HOURS=24
+TWO_FACTOR_MAX_ATTEMPTS=5
+TWO_FACTOR_LOCK_MINUTES=15
+ENVEOF
+  )
+  say "First run: configuration written to $ENV_FILE"
+fi
+
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
+
+# Migrations : le serveur ne les applique JAMAIS lui-même (server/db/migrator.ts:7-9) et refuse de
+# démarrer sur un schéma en retard (server/db/database.ts:60-67). `migrate` est idempotent.
+"$INSTALL_DIR/bin/easyactions-migrate" migrate >/dev/null
+
+# « One Bun process only » (docs/SECURITY.md:50) : la coordination des renouvellements de jetons est
+# en mémoire. Deux processus sur la même base se voleraient un jeton de rafraîchissement. Le fichier
+# de PID est la seule garde ; le dépôt n'en a aucune.
+server_running() {
+  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+if ! server_running; then
+  cd "$INSTALL_DIR"
+  # `setsid` : le serveur doit SURVIVRE au lanceur, qui se remplace ensuite par le navigateur. Sans
+  # nouvelle session il reste dans le groupe de processus du lanceur et meurt avec la fenêtre ; c'est
+  # le même besoin que le `detached: true` de scripts/desktop.ts:64.
+  setsid ./bin/easyactions-server >>"$LOG_FILE" 2>&1 </dev/null &
+  echo $! > "$PID_FILE"
+  # ÉCHEC FERMÉ : pas de fenêtre sur un serveur absent. 20 s, comme scripts/desktop.ts:29.
+  i=0
+  while [ "$i" -lt 100 ]; do
+    if curl -fsS --max-time 1 "$APP_ORIGIN/health" >/dev/null 2>&1; then break; fi
+    i=$((i + 1))
+    sleep 0.2
+  done
+  if [ "$i" -ge 100 ]; then
+    say "EasyActions did not start within 20 s. See $LOG_FILE."
+    exit 1
+  fi
+fi
+
+URL="$APP_ORIGIN/orgs"
+for name in $CHROMIUM_BROWSERS; do
+  if command -v "$name" >/dev/null 2>&1; then
+    exec "$name" "--app=$URL"
+  fi
+done
+say "No Chromium browser found. Open $URL in Brave, Chrome or Edge."

@@ -1,0 +1,141 @@
+# Publication d'une version : une étiquette poussée construit le paquet et ouvre la Release.
+#   git tag v1.0.0 && git push origin v1.0.0
+# `workflow_dispatch` construit les mêmes artefacts SANS rien publier, pour essayer l'assemblage.
+name: Release
+
+on:
+  push:
+    tags:
+      # Étiquettes NUMÉRIQUES seulement. `v*` se déclencherait aussi sur `vendor-…` ou `v-essai`.
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  # Jamais annulé en cours : une publication interrompue laisse une Release à moitié remplie.
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Check gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Refuse a shadowed Bun binary
+        run: |
+          if [ -e node_modules/.bin/bun ]; then
+            echo "node_modules/.bin/bun exists: it shadows the system Bun in every 'bun run'." >&2
+            exit 1
+          fi
+
+      - name: Check gate
+        run: bun install --frozen-lockfile && bun run typecheck && bun test && bun run build && bun audit --audit-level=high
+
+  package:
+    name: Build .deb (amd64)
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # L'étiquette est la SEULE source de la version : `package.json` n'est pas réécrit ici, sinon
+      # l'artefact viendrait d'un arbre qui n'a jamais existé dans git.
+      - name: Resolve the version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0-dispatch.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION"
+
+      - name: Build the package
+        env:
+          DEB_MAINTAINER: ${{ vars.DEB_MAINTAINER || 'Mask-AI-FR <noreply@mask-ai.fr>' }}
+        run: ./packaging/build-deb.sh "${{ steps.version.outputs.version }}" amd64
+
+      - name: Check the package installs and starts
+        run: ./packaging/smoke-deb.sh
+
+      - name: Upload the package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: easyactions-deb-amd64
+          path: dist/deb/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish the release
+    needs: package
+    # Seul ce travail publie, et seulement sur une étiquette : `workflow_dispatch` s'arrête avant.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Les règles de protection de l'environnement (relecteur obligatoire, politique d'étiquette)
+    # portent sur ce seul travail, le seul à pouvoir écrire dans le dépôt.
+    environment: deploy
+    steps:
+      - name: Download the package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: easyactions-deb-amd64
+          path: artifacts
+
+      - name: Checksums
+        working-directory: artifacts
+        run: sha256sum *.deb > SHA256SUMS && cat SHA256SUMS
+
+      # Publication en DEUX temps : brouillon, versement des fichiers, puis seulement publication.
+      # Un versement raté ne laisse jamais une Release visible et incomplète. ÉCHEC FERMÉ.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE=""
+          case "$GITHUB_REF_NAME" in *-*) PRERELEASE="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --generate-notes \
+            --title "$GITHUB_REF_NAME" \
+            $PRERELEASE \
+            artifacts/*.deb artifacts/SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false

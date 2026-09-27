@@ -1,0 +1,17 @@
+#!/bin/sh
+# N'applique PAS les migrations : la base est par utilisateur et n'existe pas encore ici, et
+# scripts/db.ts importe server/config/env.ts, qui refuse une configuration absente. Le lanceur
+# (/usr/bin/easyactions) s'en charge au premier démarrage, sous l'identité du bon utilisateur.
+set -e
+
+if [ "$1" = "configure" ]; then
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+  fi
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -f /usr/share/icons/hicolor || true
+  fi
+  echo "EasyActions installed. Launch it from your applications menu, or run: easyactions"
+fi
+
+exit 0

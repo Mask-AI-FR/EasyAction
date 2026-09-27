@@ -1,0 +1,19 @@
+# Service UTILISATEUR (`systemctl --user`), pas service système : la base est dans le dossier de
+# l'utilisateur, en 0700. Un service système tournerait sous une autre identité et ne pourrait pas la
+# lire. Livré NON ACTIVÉ ; le lanceur à la demande reste le chemin normal.
+#   systemctl --user enable --now easyactions
+[Unit]
+Description=EasyActions server
+Documentation=https://github.com/Mask-AI-FR/EasyAction
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/easyactions
+ExecStartPre=/opt/easyactions/bin/easyactions-migrate migrate
+ExecStart=/opt/easyactions/bin/easyactions-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
