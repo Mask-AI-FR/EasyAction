@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc="Run GitHub Actions across a whole organization"
 arch=('x86_64')
 url="https://github.com/Mask-AI-FR/EasyAction"
-license=('LicenseRef-proprietary')
+license=('Apache-2.0')
 depends=('curl')
 optdepends=('chromium: open the app in its own window'
             'brave-browser: open the app in its own window'
@@ -28,6 +28,10 @@ package() {
   # /usr/bin. Les données restent par utilisateur, sous ~/.local/share (voir lib/easyactions-lib.sh).
   install -dm755 "$pkgdir/opt/easyactions"
   cp -r bin lib dist "$pkgdir/opt/easyactions/"
+
+  # Convention d'Arch : le texte de la licence se pose sous /usr/share/licenses/$pkgname. Il vient
+  # de l'archive, où packaging/build-payload.sh l'a déjà mis.
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/easyactions/LICENSE"
 
   install -Dm755 "$srcdir/easyactions-system" "$pkgdir/usr/bin/easyactions"
   install -Dm644 share/applications/easyactions.desktop \

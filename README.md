@@ -310,3 +310,14 @@ The planned milestones (M0–M8) are delivered. How the dashboard counts is desc
 
 The logos, app icons and favicons are in [`EasyActions-Logo-Pack-v2/`](EasyActions-Logo-Pack-v2/). Its
 [README](EasyActions-Logo-Pack-v2/README.txt) covers colours, typeface, sizes and clear-space rules.
+
+## License
+
+EasyActions is released under the **Apache License 2.0** (`SPDX-License-Identifier: Apache-2.0`). The
+full text is in [LICENSE](LICENSE), and every package ships a copy. You may use, modify and
+redistribute it, including commercially, as long as you keep the copyright and licence notices and
+state the changes you made to any file you redistribute.
+
+The licence covers the **code only**. The EasyActions name and the logos, app icons and favicons in
+[`EasyActions-Logo-Pack-v2/`](EasyActions-Logo-Pack-v2/) are not granted with it: a fork may use the
+code, not the brand.

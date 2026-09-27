@@ -25,6 +25,10 @@ bun build --compile --target="$BUN_TARGET" scripts/users.ts    --outfile "$OUT/b
 
 install -m 0644 packaging/common/easyactions-lib.sh "$OUT/lib/easyactions-lib.sh"
 
+# Apache-2.0 §4 : tout destinataire d'une copie doit recevoir le texte de la licence. Il voyage donc
+# DANS la charge utile, jamais seulement dans le dépôt — sinon un paquet installé ne l'aurait pas.
+install -m 0644 LICENSE "$OUT/LICENSE"
+
 # `dist/app` est servi par un chemin relatif au dossier de travail du serveur (server/index.ts:16).
 rm -rf "$OUT/dist"
 mkdir -p "$OUT/dist"
