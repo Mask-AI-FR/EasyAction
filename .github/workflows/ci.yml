@@ -1,0 +1,58 @@
+# Portail de vérification du dépôt, sur chaque poussée et chaque PR vers `main`.
+# La même commande que README.md et .claude/rules/pipliner.md documentent, mot pour mot.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Aucun droit par défaut : chaque tâche demande le sien.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Check gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Les actions sont épinglées au SHA complet : une étiquette flottante laisserait un tiers
+      # changer le code exécuté ici sans que le dépôt bouge (CLAUDE.md §7).
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # `.bun-version` est le seul propriétaire de la version du runtime (§6.1).
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      # Échec rapide avant la garde ci-dessous, qui a besoin de node_modules.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # ÉCHEC FERMÉ : bun-plugin-tailwind déclare `bun` en pair ; l'installer pose un binaire Bun
+      # dans node_modules/.bin qui masque le Bun du système dans chaque `bun run`, et tout résultat
+      # obtenu ensuite ne veut plus rien dire. `bunfig.toml` (peer = false) l'empêche ; on vérifie
+      # qu'une configuration différente ne l'a pas réintroduit.
+      - name: Refuse a shadowed Bun binary
+        run: |
+          if [ -e node_modules/.bin/bun ]; then
+            echo "node_modules/.bin/bun exists: it shadows the system Bun in every 'bun run'." >&2
+            echo "Check that bunfig.toml still sets 'peer = false' under [install]." >&2
+            exit 1
+          fi
+
+      # La porte documentée, inchangée : la chaîne `&&` s'arrête exactement où la documentation le dit.
+      # Elle réinstalle volontairement (node_modules est déjà chaud, c'est immédiat) pour que la
+      # commande lue ici soit celle que README.md donne, sans variante.
+      - name: Check gate
+        run: bun install --frozen-lockfile && bun run typecheck && bun test && bun run build && bun audit --audit-level=high
