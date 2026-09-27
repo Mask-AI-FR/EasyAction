@@ -10,6 +10,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Mask-AI-FR/EasyAction/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Mask-AI-FR/EasyAction/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/Mask-AI-FR/EasyAction/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Mask-AI-FR/EasyAction?color=047857"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-16A34A"></a>
+</p>
+
+<p align="center">
   <img alt="Bun 1.3.11" src="https://img.shields.io/badge/Bun-1.3.11-052E1C?logo=bun&logoColor=white">
   <img alt="TypeScript 5.9.3" src="https://img.shields.io/badge/TypeScript-5.9.3-047857?logo=typescript&logoColor=white">
   <img alt="Hono 4.13.9" src="https://img.shields.io/badge/Hono-4.13.9-16A34A?logo=hono&logoColor=white">
@@ -19,10 +25,12 @@
 <p align="center">
   <a href="#features">Features</a> ·
   <a href="#how-it-works">How it works</a> ·
+  <a href="#installation">Installation</a> ·
   <a href="#getting-started">Getting started</a> ·
   <a href="#configuration">Configuration</a> ·
   <a href="#security">Security</a> ·
   <a href="#development">Development</a> ·
+  <a href="#contributing">Contributing</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a>
 </p>
 
@@ -96,6 +104,61 @@ Browser ── same origin ──▶ Bun + Hono
 Every design choice, the full list of routes, and the behaviour on each kind of failure are described
 in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**; what is stored and how it is protected, in
 **[docs/SECURITY.md](docs/SECURITY.md)**.
+
+## Installation
+
+Every [release](https://github.com/Mask-AI-FR/EasyAction/releases/latest) ships ready-made Linux x64
+builds, so you do not need Bun. Each user gets their own database in `~/.local/share/easyactions` and
+their own settings in `~/.config/easyactions`. The two secrets are generated on the first run.
+
+Whichever build you choose, you still need a GitHub App first: see
+[step 1 below](#1-create-a-github-app).
+
+| Build | For |
+|---|---|
+| `easyactions_<version>_amd64.deb` | Debian, Ubuntu and derivatives |
+| `easyactions-<version>-linux-x64.tar.gz` | Any distribution. No root needed |
+| `PKGBUILD`, `easyactions-system`, `easyactions.service` | Arch Linux and derivatives |
+| `SHA256SUMS` | Checksums for all of the above |
+
+Download the files you need from the release page, then check them:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+**Debian / Ubuntu**
+
+```bash
+sudo apt install ./easyactions_<version>_amd64.deb
+```
+
+**Any distribution (portable archive)**
+
+```bash
+tar -xzf easyactions-<version>-linux-x64.tar.gz
+cd easyactions-<version>-linux-x64
+./install.sh            # links `easyactions` into ~/.local/bin; `./install.sh --uninstall` undoes it
+```
+
+**Arch Linux.** Put `PKGBUILD`, `easyactions-system` and `easyactions.service` in one folder, then:
+
+```bash
+makepkg -si
+```
+
+**Then, as your normal user (not root):**
+
+```bash
+easyactions                                   # start the server and open the app in its own window
+easyactions settings:setup-code               # one-time code for the /setup page (30 minutes)
+easyactions users:promote <your-github-login> # make yourself an admin (sign in once first)
+```
+
+`easyactions help` lists every command. With the `.deb` or Arch package, keep the server running
+across reboots with `systemctl --user enable --now easyactions`.
+
+To run from source instead, follow the steps below.
 
 ## Getting started
 
@@ -267,6 +330,12 @@ server back in setup mode and prints a new setup code.
 > **Warning:** a `workflow_dispatch` run usually deploys something. Test with a sandbox repository
 > that has a no-op workflow, never with production workflows.
 
+### Reporting a vulnerability
+
+Please do not open a public issue for a security problem. Report it privately through
+[GitHub's private vulnerability reporting](https://github.com/Mask-AI-FR/EasyAction/security/advisories/new)
+instead.
+
 ## Development
 
 Check gate. All of these must pass before a change is considered done:
@@ -300,6 +369,22 @@ Project conventions:
 - Components use shadow DOM and only MASKAI semantic classes.
 
 The tests check the design rules. The full rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Contributing
+
+Contributions are welcome: bug reports, fixes and improvements.
+
+1. For a bug, [open an issue](https://github.com/Mask-AI-FR/EasyAction/issues) with the steps to
+   reproduce it. Leave out tokens, cookies and personal data.
+2. For a larger change, open an issue first so the approach can be agreed before you write code.
+3. Fork the repository and branch from `main`.
+4. Keep the change focused. Add a test that fails without it, and update the docs it affects.
+5. Run the [check gate](#development). CI runs the same command on every pull request to `main`.
+6. Open a pull request that explains what changed and why.
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before your first change. It explains the reasons
+behind the rules the tests enforce. By contributing, you agree that your contribution is licensed
+under the [Apache License 2.0](LICENSE).
 
 ## Roadmap
 
