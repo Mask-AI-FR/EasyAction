@@ -1,12 +1,15 @@
-import { html, nothing } from "lit";
+import { html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { Component, Input, Reactive, TiniComponent } from "@tinijs/core";
 import type { WorkflowsBody } from "../../../domain/apiContract.ts";
-import type { RepoSummary, RepoVisibility } from "../../../domain/githubTypes.ts";
-import { api, asLoadError, type LoadState } from "../../services/api-client.ts";
+import type { RepoSummary, RepoVisibility, WorkflowSummary } from "../../../domain/githubTypes.ts";
+import { chosenPipelineOf } from "../../../domain/selection.ts";
+import { api, asLoadError, inTurn, type LoadState } from "../../services/api-client.ts";
 import {
   branchFor,
   chooseBranch,
+  choosePipeline,
+  pipelineFor,
   selectionStore,
   toggleRepo,
   toggleWorkflow,
@@ -15,7 +18,7 @@ import { StoreController } from "../../stores/store-controller.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
 import { cn } from "../../ui/class-names.ts";
-import { BADGE_CLASS, BADGE_TONE, CHECKBOX_CLASS } from "../../ui/field-classes.ts";
+import { BADGE_CLASS, BADGE_TONE, CHECKBOX_CLASS, SELECT_CLASS } from "../../ui/field-classes.ts";
 import { TABLE_CELL_CLASS } from "../../ui/table-classes.ts";
 import "./branch-select.ts";
 import "./workflow-list.ts";
@@ -46,6 +49,9 @@ function relativeTime(iso: string | null): string {
   return "Just now";
 }
 
+/** « deploy.yml » : le nom du fichier distingue les huit workflows MaskAI appelés « CI/CD ». */
+const fileNameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+
 function countLabel(workflows: WorkflowsBody["workflows"]): string {
   const active = workflows.filter((workflow) => workflow.state === "active").length;
   return `${workflows.length} ${workflows.length === 1 ? "workflow" : "workflows"} · ${active} active`;
@@ -54,9 +60,9 @@ function countLabel(workflows: WorkflowsBody["workflows"]): string {
 /**
  * Une ligne de la liste des dépôts. Ses cellules sont les enfants directs de son shadow root : l'hôte
  * porte la grille (`TABLE_COLUMNS`, posée par le tableau) et elles s'y placent ; le détail déplié
- * occupe toute la largeur. La branche se choisit dans la ligne même (sa liste se charge avec la
- * ligne) ; les workflows ne sont lus qu'à l'ouverture (deux appels GitHub par dépôt ouvert, au lieu
- * de cinquante par page affichée).
+ * occupe toute la largeur. La branche et le pipeline se choisissent dans la ligne même : branches et
+ * workflows se chargent avec la ligne (trois appels GitHub par dépôt affiché, 4 lectures à la fois,
+ * gardées 60 s) — le prix de la liste déroulante des pipelines, accepté le 2026-09-29.
  */
 @Component({ name: "app-repo-row" })
 export class AppRepoRow extends TiniComponent {
@@ -67,8 +73,13 @@ export class AppRepoRow extends TiniComponent {
   /** Workflows de la branche choisie ; `null` tant que la ligne n'a jamais été ouverte. */
   @Reactive() private workflows: LoadState<WorkflowsBody> | null = null;
   private readonly selection = new StoreController(this, selectionStore, "selection");
-  // Abonnement seul : la ligne se redessine quand la branche choisie change (lue par `branchFor`).
+  // Abonnements seuls : la ligne se redessine quand la branche ou le pipeline choisis changent.
   private readonly branches = new StoreController(this, selectionStore, "branches");
+  private readonly pipelines = new StoreController(this, selectionStore, "pipelines");
+
+  onChanges(changed: PropertyValues<this>): void {
+    if (changed.has("repo") && this.repo) void this.loadWorkflows(false);
+  }
 
   protected override render() {
     const repo = this.repo;
@@ -95,6 +106,7 @@ export class AppRepoRow extends TiniComponent {
           @branch-change=${(event: CustomEvent<string>) => this.onBranchChange(repo, event.detail)}
         ></app-branch-select>
       </div>
+      ${this.renderPipeline(repo)}
       <div
         role="cell"
         class=${cn(TABLE_CELL_CLASS, "text-xs text-text-secondary")}
@@ -147,7 +159,7 @@ export class AppRepoRow extends TiniComponent {
       <div
         id="details"
         role="cell"
-        aria-colspan="6"
+        aria-colspan="7"
         class="col-span-full animate-fade-in border-t border-border bg-surface-secondary/40 px-(--row-padding-x) py-3"
       >
         <p class="mb-2.5 text-xs text-text-tertiary">
@@ -158,12 +170,79 @@ export class AppRepoRow extends TiniComponent {
         <app-workflow-list
           .repo=${repo}
           branch=${branch}
+          .chosenId=${this.chosenId()}
           .state=${workflows ?? { status: "loading" }}
           @workflow-toggle=${(event: CustomEvent<number>) => this.onWorkflowToggle(repo, event.detail)}
           @retry=${() => void this.loadWorkflows(true)}
         ></app-workflow-list>
       </div>
     `;
+  }
+
+  /**
+   * Le pipeline qui partira si le dépôt est coché : le seul actif est pris d'office ; s'il y en a
+   * plusieurs, « Choose a pipeline » reste affiché tant qu'aucun n'est choisi (rien ne part sans lui).
+   */
+  private renderPipeline(repo: RepoSummary) {
+    const workflows = this.workflows;
+    const active = workflows?.status === "ready" ? workflows.data.workflows.filter((workflow) => workflow.state === "active") : [];
+    const chosen = active.find((workflow) => workflow.id === this.chosenId());
+    return html`
+      <div role="cell" class=${TABLE_CELL_CLASS}>
+        <div class="flex min-w-0 items-center gap-1">
+          <label class="min-w-0 flex-1">
+            <span class="sr-only">Pipeline of ${repo.name}</span>
+            <select
+              class=${cn(SELECT_CLASS, "h-8 w-full min-w-0 px-2 text-xs")}
+              ?disabled=${active.length === 0}
+              aria-busy=${workflows === null || workflows.status === "loading" ? "true" : "false"}
+              title=${chosen?.path ?? ""}
+              @change=${(event: Event) => choosePipeline(repo, Number((event.target as HTMLSelectElement).value))}
+            >
+              ${this.renderPipelineOptions(active, chosen)}
+            </select>
+          </label>
+          ${workflows?.status === "error" ? this.renderPipelineRetry() : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderPipelineOptions(active: readonly WorkflowSummary[], chosen: WorkflowSummary | undefined) {
+    const status = this.workflows?.status ?? "loading";
+    if (status === "loading") return html`<option selected>Loading…</option>`;
+    if (status === "error") return html`<option selected>Pipelines unavailable</option>`;
+    if (active.length === 0) return html`<option selected>No pipeline</option>`;
+    return html`
+      ${chosen ? nothing : html`<option value="" selected disabled>Choose a pipeline</option>`}
+      ${active.map(
+        (workflow) => html`<option value=${String(workflow.id)} ?selected=${workflow === chosen}>
+          ${workflow.name} · ${fileNameOf(workflow.path)}
+        </option>`,
+      )}
+    `;
+  }
+
+  /** Les workflows n'ont pas pu être lus : un bouton relance la lecture (le détail dit pourquoi). */
+  private renderPipelineRetry() {
+    return html`<button
+      type="button"
+      class=${buttonClass({ variant: "ghost", size: "icon-xs" })}
+      aria-label="Pipelines unavailable. Try again"
+      title="Pipelines unavailable. Try again"
+      @click=${() => void this.loadWorkflows(true)}
+    >
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="size-3.5 text-signal-danger-text">
+        <path d="M13 8a5 5 0 1 1-1.46-3.54M13 2.5V5h-2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>`;
+  }
+
+  /** Pipeline choisi du dépôt (`domain/selection.ts`), s'il est connu. */
+  private chosenId(): number | null {
+    const workflows = this.workflows;
+    if (!this.repo || workflows?.status !== "ready") return null;
+    return chosenPipelineOf(workflows.data.workflows, pipelineFor(this.repo));
   }
 
   /** Workflows actifs du dépôt, s'ils sont chargés : l'état « partiel » de la case en dépend. */
@@ -178,15 +257,14 @@ export class AppRepoRow extends TiniComponent {
     if (this.expanded && this.workflows === null) void this.loadWorkflows(false);
   }
 
-  /** Les workflows ne sont relus que s'ils l'avaient déjà été (ligne ouverte au moins une fois). */
+  /** Autre branche : l'état des dernières exécutions change, les workflows sont relus. */
   private onBranchChange(repo: RepoSummary, branch: string): void {
     chooseBranch(repo, branch);
-    if (this.workflows !== null) void this.loadWorkflows(false);
+    void this.loadWorkflows(false);
   }
 
   private onWorkflowToggle(repo: RepoSummary, workflowId: number): void {
-    const activeIds = this.activeIds();
-    if (activeIds) toggleWorkflow(repo, workflowId, activeIds);
+    if (this.workflows?.status === "ready") toggleWorkflow(repo, workflowId, this.chosenId());
   }
 
   /** ÉCHEC OUVERT : lecture seule ; l'échec reste dans la ligne, le reste de la page fonctionne. */
@@ -197,7 +275,7 @@ export class AppRepoRow extends TiniComponent {
     const current = () => repo === this.repo && branch === branchFor(repo);
     this.workflows = { status: "loading" };
     try {
-      const data = await api.workflows(repo, branch, { fresh });
+      const data = await inTurn(() => api.workflows(repo, branch, { fresh }));
       if (current()) this.workflows = { status: "ready", data };
     } catch (err) {
       if (current()) this.workflows = { status: "error", error: asLoadError(err) };

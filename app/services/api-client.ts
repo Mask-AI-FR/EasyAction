@@ -139,6 +139,26 @@ function cachedRequest<T>(path: string, options: ReadOptions): Promise<T> {
   return value;
 }
 
+/**
+ * Chaque ligne affichée lit ses branches et ses workflows (jusqu'à 25 lignes par page) : 4 lectures
+ * partent à la fois vers GitHub, les autres attendent leur tour, pour ne pas lâcher 50 requêtes d'un coup.
+ */
+const MAX_PARALLEL_LOADS = 4;
+let running = 0;
+const waiting: (() => void)[] = [];
+
+/** Lance une lecture de ligne à son tour (file partagée par toutes les lignes de la page). */
+export async function inTurn<T>(task: () => Promise<T>): Promise<T> {
+  if (running >= MAX_PARALLEL_LOADS) await new Promise<void>((resolve) => waiting.push(resolve));
+  running += 1;
+  try {
+    return await task();
+  } finally {
+    running -= 1;
+    waiting.shift()?.();
+  }
+}
+
 const repoPath = (repo: RepoName): string =>
   `/api/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}`;
 

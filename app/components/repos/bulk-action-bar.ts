@@ -6,7 +6,7 @@ import type { WorkflowSummary } from "../../../domain/githubTypes.ts";
 import type { RepoRef, RepoSelection } from "../../../domain/selection.ts";
 import { api, ApiError } from "../../services/api-client.ts";
 import { trackDispatched } from "../../services/run-poller.ts";
-import { clearSelection, selectionStore } from "../../stores/selection-store.ts";
+import { clearSelection, pipelineFor, selectionStore } from "../../stores/selection-store.ts";
 import { sessionStore } from "../../stores/session-store.ts";
 import { StoreController } from "../../stores/store-controller.ts";
 import { showToast, updateToast, type ToastContent } from "../../stores/toast-store.ts";
@@ -154,7 +154,7 @@ export class AppBulkActionBar extends TiniComponent {
     try {
       const known = await resolveWorkflows(selection.entries());
       const workflowsOf = (repo: RepoRef, branch: string) => known.get(entryKey(repo, branch)) ?? null;
-      this.plan = planDispatch(selection, workflowsOf, limits.dispatchMaxTargets);
+      this.plan = planDispatch(selection, workflowsOf, pipelineFor, limits.dispatchMaxTargets);
       this.outcomes = null;
       this.dialogOpen = true;
     } finally {

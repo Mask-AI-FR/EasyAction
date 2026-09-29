@@ -81,7 +81,7 @@ function outcomeView(outcome: DispatchOutcome, runs: ReadonlyMap<number, Tracked
 /**
  * Confirmation d'un lancement, puis son résultat. Tout ce qui partira est listé (dépôt, workflow,
  * chemin, branche) avec les risques : branche par défaut (production pour MaskAI), plusieurs
- * workflows d'un dépôt (groupes de concurrence), dépôts illisibles, plafond. Sur une branche par
+ * workflows d'un dépôt (groupes de concurrence), pipeline à choisir, dépôts illisibles, plafond. Sur une branche par
  * défaut, le bouton reste inactif tant que le nom de l'organisation n'est pas saisi.
  * Émet `confirm` et `dismiss`.
  */
@@ -154,6 +154,9 @@ export class AppDispatchConfirm extends TiniComponent {
         : nothing}
       ${plan.reposWithSeveral.length > 0
         ? callout("warning", `Several workflows start in ${namesOf(plan.reposWithSeveral)}. Workflows sharing a concurrency group can cancel each other's pending runs.`)
+        : nothing}
+      ${plan.unchosenRepos.length > 0
+        ? callout("warning", `Several pipelines exist in ${namesOf(plan.unchosenRepos)} and none is chosen. Nothing starts there: choose one in its row.`)
         : nothing}
       ${plan.unreadableRepos.length > 0
         ? callout("warning", `Workflows could not be read for ${namesOf(plan.unreadableRepos)}. Nothing starts there.`)

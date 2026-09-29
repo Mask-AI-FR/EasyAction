@@ -38,6 +38,8 @@ export class AppWorkflowList extends TiniComponent {
 
   @Input({ attribute: false }) repo: RepoRef | undefined = undefined;
   @Input() branch = "";
+  /** Pipeline choisi dans la ligne : c'est lui qui est coché quand le dépôt entier l'est. */
+  @Input({ attribute: false }) chosenId: number | null = null;
   @Input({ attribute: false }) state: LoadState<WorkflowsBody> = { status: "loading" };
   private readonly selection = new StoreController(this, selectionStore, "selection");
   private readonly liveRuns = new StoreController(this, liveRunsStore, "runs");
@@ -70,7 +72,7 @@ export class AppWorkflowList extends TiniComponent {
 
   private renderWorkflow(workflow: WorkflowSummary) {
     const active = workflow.state === "active";
-    const picked = active && this.repo !== undefined && this.selection.value.isWorkflowPicked(this.repo, workflow.id);
+    const picked = active && this.repo !== undefined && this.selection.value.isWorkflowPicked(this.repo, workflow.id, this.chosenId);
     const view = this.runView(workflow);
     return html`<li class="flex items-center gap-3 px-3 py-2">
       <input

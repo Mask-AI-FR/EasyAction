@@ -8,6 +8,7 @@ import {
 import { isSameOriginPath } from "../../domain/returnTo.ts";
 import { signInUrl } from "../services/api-client.ts";
 import { forgetOrg } from "../stores/last-org.ts";
+import { forgetPipelines } from "../stores/pipeline-choice.ts";
 import { ensureSession } from "../stores/session-store.ts";
 import { sharedSheet } from "../styles/shared-sheet.ts";
 import { buttonClass } from "../ui/button-classes.ts";
@@ -67,13 +68,14 @@ export class AppPageLogin extends TiniComponent implements OnBeforeEnter {
    * Déjà connecté : on va directement à la destination. ÉCHEC OUVERT si le serveur ne répond pas :
    * on affiche simplement la page de connexion, qui ne donne accès à rien.
    * Toute fin de session passe par ici (déconnexion, effacement, session expirée ou fermée ailleurs) :
-   * sans session, l'organisation retenue est oubliée — la personne suivante sur ce navigateur ne la
-   * verra pas.
+   * sans session, l'organisation et les pipelines retenus sont oubliés — la personne suivante sur ce
+   * navigateur ne les verra pas.
    */
   async onBeforeEnter(): Promise<string | undefined> {
     const session = await ensureSession().catch(() => null);
     if (session) return requestedReturnTo();
     forgetOrg();
+    forgetPipelines();
     return undefined;
   }
 

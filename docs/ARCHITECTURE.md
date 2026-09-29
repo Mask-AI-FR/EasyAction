@@ -25,9 +25,18 @@ sign-in). Admins set the GitHub connection and the limits on a Settings page, ma
 the history (M7). Each organization opens on its dashboard (M8, [DASHBOARD.md](DASHBOARD.md)).
 
 Each repository row has its own branch list (`app/components/repos/branch-select.ts`): every branch,
-whether or not a pipeline ever ran on it — default first, then active, then stale. The lists of the
-visible rows load in the background, 4 GitHub requests at a time, cached 60 seconds; the workflows of a
-row are read only when it is opened. A branch where nothing ever ran says so, and stays runnable.
+whether or not a pipeline ever ran on it — default first, then active, then stale. A branch where
+nothing ever ran says so, and stays runnable.
+
+Each row also has a **Pipeline** dropdown (`app/components/repos/repo-row.ts`) listing the repository's
+active workflows (name · file name). Ticking a repository runs its **chosen pipeline** only
+(`chosenPipelineOf` in `domain/selection.ts`): the one picked in the dropdown if it is still active,
+else the only active workflow; with several and none picked the dropdown shows "Choose a pipeline" and
+nothing starts there. The pick is remembered in this browser (`app/stores/pipeline-choice.ts`). More
+workflows can still be ticked by hand in the opened row; picking in the dropdown goes back to that one
+pipeline. The branch list and the workflows of the visible rows load in the background (about three
+GitHub requests per row), 4 at a time (`inTurn` in `app/services/api-client.ts`), cached 60 seconds.
+Below 57 rem the table scrolls sideways rather than squeeze the repository name.
 
 ## 2. Runtime and stack
 
@@ -72,7 +81,8 @@ Browser ── same origin ──▶ one Bun process
   and bodies never leave the adapter (only a stable failure code does).
 - **Bulk runs (M4).** `app/components/repos/bulk-action-bar.ts` owns the flow: read the workflows of
   every selected repository (4 at a time, 60-second browser cache) → `domain/dispatchPlan.ts` (active
-  workflows only, one branch per repository, cap, default-branch count) → confirmation dialog listing
+  workflows only, the chosen pipeline of each ticked repository, one branch per repository, cap,
+  default-branch count) → confirmation dialog listing
   every repository, workflow, file path and branch → **one** `POST /api/dispatches` → a toast with the
   per-target outcome → live tracking. The server re-validates everything and dispatches
   `DISPATCH_CONCURRENCY` at a time (`server/services/dispatchRunner.ts`); a dispatch is never sent
@@ -175,8 +185,9 @@ Since M5, Pipliner owns one SQLite database and is its only writer: tables `user
 tokens encrypted), `audit_events` (the history), `second_factors`, `recovery_codes` and `settings`. Every query lives in `server/repositories/`; the
 schema changes only through `server/db/migrations/` and `bun run db:migrate`. What each table holds,
 how it is erased and exported, and the file's protection: [SECURITY.md §1–§2](SECURITY.md#1-what-easyactions-stores).
-The browser holds the session cookie (a random id) and one preference, the last organization opened
-(`app/stores/last-org.ts`, deleted when the session ends). The web app keeps its selection, the runs it
+The browser holds the session cookie (a random id) and two preferences, deleted when the session ends:
+the last organization opened (`app/stores/last-org.ts`) and the pipeline chosen for each repository
+(`app/stores/pipeline-choice.ts`). The web app keeps its selection, the runs it
 follows and a 60-second read cache in memory only: a reload clears them, and sign-out reloads the page
 (`app/layouts/dashboard.ts`), so no timer keeps polling for a session that has ended.
 
@@ -230,12 +241,14 @@ database, never in `.env`: entered on `/setup`, then on the Settings page ([SECU
 | Dashboard: one repository unreadable or not read in time, a limit reached | **Open**, each gap named, no comparison; list failure, rate limit, refused token: **closed** ([DASHBOARD.md §5](DASHBOARD.md#5-partial-data--a-written-exception)) | `server/services/dashboardCollector.ts` |
 | A `Link` "next page" pointing to another host | **Closed**: not followed (the token never leaves our GitHub) | `server/adapters/githubApi.ts` |
 | Organization list fails in the sidebar switcher; browser storage refused | **Open**: the switcher shows the current organization only (`/orgs` shows the error); without storage nothing is remembered and the first organization is selected | `app/layouts/dashboard.ts`, `app/stores/last-org.ts` |
+| Stored pipeline choices refused or unreadable | **Open**: nothing is remembered; a repository with one pipeline still uses it, one with several asks again | `app/stores/pipeline-choice.ts` |
 | Browser cannot check the session (server down) on a signed-in page | **Closed**: to sign-in with `error=unavailable` | `app/layouts/dashboard.ts` |
 | Same, on the sign-in page itself | **Open**: the sign-in page is shown (it grants nothing) | `app/pages/login.ts` |
 | Sign-out request fails | **Closed**: stays signed in, shows "Sign-out failed" | `app/layouts/dashboard.ts` |
 | A stylesheet fails to load in the browser | **Closed**: the app does not start (an unstyled UI must not trigger deploys) | `app/styles/shared-sheet.ts` |
 | Branches or workflows of one repository cannot be read | **Open** for the page: the row shows the reason and "Try again"; the current branch stays selected | `app/components/repos/branch-select.ts`, `workflow-list.ts`, `repo-row.ts` |
 | Workflows of a selected repository cannot be read when preparing a run | **Closed** for that repository: nothing starts there, and the confirmation names it | `app/components/repos/bulk-action-bar.ts`, `domain/dispatchPlan.ts` |
+| A ticked repository has several pipelines and none is chosen | **Closed** for that repository: nothing starts there (running them all could deploy several times), and the confirmation names it | `domain/dispatchPlan.ts`, `app/components/repos/dispatch-confirm.ts` |
 | Dispatch body invalid, or more than `DISPATCH_MAX_TARGETS` targets | **Closed**: `400`, nothing is dispatched | `server/routers/api.ts` |
 | Rate limit or ended session during a batch | **Closed**: nothing more is sent; the rest is `not_attempted` | `server/services/dispatchRunner.ts` |
 | Timeout, network error or 5xx on one dispatch | **Closed**: never retried (a duplicate would deploy twice); outcome `unknown`, "check GitHub" | `server/adapters/githubActions.ts` |

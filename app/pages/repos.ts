@@ -28,6 +28,12 @@ import "../components/repos/repo-toolbar.ts";
  * l'adresse. Le routeur de TiniJS garde le même élément de page d'une organisation à l'autre : la page
  * se resynchronise donc sur l'événement `tini:route-change`, pas seulement à sa création.
  */
+/** Comment lancer : la règle du pipeline choisi (`domain/selection.ts`), dite une fois au-dessus du tableau. */
+const PIPELINE_GUIDE = html`<p class="text-xs text-text-secondary">
+  Tick the repositories, choose the pipeline to run in each row, then click Run pipelines. A repository
+  with one pipeline uses it automatically. Your choice is remembered in this browser until you sign out.
+</p>`;
+
 @Page({ name: "app-page-repos" })
 export class AppPageRepos extends TiniComponent {
   static override styles = [sharedSheet];
@@ -119,6 +125,7 @@ export class AppPageRepos extends TiniComponent {
             Showing the first ${repos.length} of ${totalCount} repositories (limit set by REPOS_MAX).
           </p>`
         : nothing}
+      ${page.total === 0 ? nothing : PIPELINE_GUIDE}
       ${this.renderSelectAll(page)}
       ${page.total === 0 ? this.renderNoMatch(repos.length) : html`<app-repo-table .repos=${page.items}></app-repo-table>`}
       <app-pagination-bar

@@ -21,11 +21,13 @@ Every query lives in `server/repositories/` (one module per table).
 
 - Times are seconds since the Unix epoch, UTC.
 - The browser holds the session cookie (a random id), during a sign-in the 10-minute flow cookie, and
-  one preference in its local storage: `easyactions.lastOrg`, the login of the last organization opened,
-  so it is selected by default. It is an organization's name, not personal data (only organizations are
-  listed, `server/adapters/githubRepos.ts`), and it does not outlive the session: deleted at sign-out
-  and "Delete my data" (`forgetSession`), and whenever the sign-in page opens without a session (ended
-  or expired, `app/pages/login.ts`), so the next person on a shared browser never sees it. The web app
+  two preferences in its local storage: `easyactions.lastOrg`, the login of the last organization
+  opened, so it is selected by default, and `easyactions.pipelines`, the workflow id chosen for each
+  repository (`owner/name` → id, `app/stores/pipeline-choice.ts`). They are organization and repository
+  names, not personal data (only organizations are listed, `server/adapters/githubRepos.ts`), and they
+  do not outlive the session: deleted at sign-out and "Delete my data" (`forgetSession`), and whenever
+  the sign-in page opens without a session (ended or expired, `app/pages/login.ts`), so the next person
+  on a shared browser never sees them. The web app
   keeps its selection, the runs it follows and a 60-second read cache in memory.
 - The logs hold no personal data at all (§9).
 - **The dashboard (M8) stores nothing in the database.** Commit authors' logins and e-mails exist only
