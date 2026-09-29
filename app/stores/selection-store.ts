@@ -1,10 +1,13 @@
 import { createStore } from "@tinijs/store";
 import { Selection, type CheckState, type RepoRef } from "../../domain/selection.ts";
+import { rememberedPipelines, rememberPipelines } from "./pipeline-choice.ts";
 
 interface SelectionState {
   selection: Selection;
   /** Branche choisie pour un dépôt (clé `owner/name`), coché ou non ; à défaut, sa branche par défaut. */
   branches: ReadonlyMap<string, string>;
+  /** Pipeline choisi pour un dépôt (clé `owner/name`), retenu par ce navigateur. */
+  pipelines: ReadonlyMap<string, number>;
 }
 
 /**
@@ -14,6 +17,7 @@ interface SelectionState {
 export const selectionStore = createStore<SelectionState>({
   selection: Selection.empty,
   branches: new Map(),
+  pipelines: rememberedPipelines(),
 });
 
 const keyOf = (repo: RepoRef): string => `${repo.owner}/${repo.name}`;
@@ -28,16 +32,29 @@ export function chooseBranch(repo: RepoRef, branch: string): void {
   selectionStore.commit("selection", selectionStore.selection.withBranch(repo, branch));
 }
 
-/** Case d'un dépôt : cochée → décochée ; vide ou partielle → tous ses workflows actifs. */
+/** Pipeline retenu pour un dépôt ; `null` sans choix (voir `chosenPipelineOf` pour la règle complète). */
+export function pipelineFor(repo: RepoRef): number | null {
+  return selectionStore.pipelines.get(keyOf(repo)) ?? null;
+}
+
+/** Choix dans la liste déroulante : retenu, et c'est ce pipeline seul qui partira si le dépôt est coché. */
+export function choosePipeline(repo: RepoRef, workflowId: number): void {
+  const pipelines = new Map(selectionStore.pipelines).set(keyOf(repo), workflowId);
+  selectionStore.commit("pipelines", pipelines);
+  rememberPipelines(pipelines);
+  selectionStore.commit("selection", selectionStore.selection.withChosenPipeline(repo));
+}
+
+/** Case d'un dépôt : cochée → décochée ; vide ou partielle → son pipeline choisi. */
 export function toggleRepo(repo: RepoRef, state: CheckState): void {
   const without = selectionStore.selection.removeRepos([repo]);
   selectionStore.commit("selection", state === "all" ? without : without.toggleRepo(repo, branchFor(repo)));
 }
 
-export function toggleWorkflow(repo: RepoRef, workflowId: number, activeIds: readonly number[]): void {
+export function toggleWorkflow(repo: RepoRef, workflowId: number, chosenId: number | null): void {
   selectionStore.commit(
     "selection",
-    selectionStore.selection.toggleWorkflow(repo, branchFor(repo), workflowId, activeIds),
+    selectionStore.selection.toggleWorkflow(repo, branchFor(repo), workflowId, chosenId),
   );
 }
 
@@ -57,7 +74,10 @@ export function clearSelection(): void {
   selectionStore.commit("selection", Selection.empty);
 }
 
-/** Changement d'organisation : on repart de zéro, un lancement ne mélange jamais deux organisations. */
+/**
+ * Changement d'organisation : on repart de zéro, un lancement ne mélange jamais deux organisations. Les
+ * pipelines choisis restent : ils sont retenus par dépôt, et leur clé porte l'organisation.
+ */
 export function resetSelection(): void {
   selectionStore.commit("selection", Selection.empty);
   selectionStore.commit("branches", new Map());

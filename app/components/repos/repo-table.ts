@@ -45,6 +45,7 @@ export class AppRepoTable extends TiniComponent {
           </span>
           <span role="columnheader" class=${TABLE_HEAD_CELL_CLASS}>Repository</span>
           <span role="columnheader" class=${TABLE_HEAD_CELL_CLASS}>Branch</span>
+          <span role="columnheader" class=${TABLE_HEAD_CELL_CLASS}>Pipeline</span>
           <span role="columnheader" class=${TABLE_HEAD_CELL_CLASS}>Last push</span>
           <span role="columnheader" class=${TABLE_HEAD_CELL_CLASS}>Language</span>
           <span role="columnheader" class=${TABLE_HEAD_CELL_CLASS}><span class="sr-only">Workflows</span></span>

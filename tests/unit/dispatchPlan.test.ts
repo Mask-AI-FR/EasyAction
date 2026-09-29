@@ -23,10 +23,11 @@ const catalog: Record<string, WorkflowSummary[] | null> = {
   infra: null,
 };
 const workflowsOf = (repo: RepoRef) => catalog[repo.name] ?? null;
+const noChoice = () => null;
 
 describe("plan de lancement", () => {
-  test("« tous les workflows » ne prend que les actifs, sur la branche choisie", () => {
-    const plan = planDispatch(Selection.empty.toggleRepo(front, "V0-1-1"), workflowsOf, 50);
+  test("un dépôt coché lance son seul workflow actif, sur la branche choisie", () => {
+    const plan = planDispatch(Selection.empty.toggleRepo(front, "V0-1-1"), workflowsOf, noChoice, 50);
     expect(plan.items).toEqual([
       {
         owner: "Mask-AI-FR",
@@ -41,30 +42,51 @@ describe("plan de lancement", () => {
     expect(plan.defaultBranchCount).toBe(0);
   });
 
+  test("plusieurs pipelines : seul le pipeline choisi part", () => {
+    const plan = planDispatch(Selection.empty.toggleRepo(org, "main"), workflowsOf, () => 4, 50);
+    expect(plan.items.map((item) => item.workflowId)).toEqual([4]);
+    expect(plan.reposWithSeveral).toEqual([]);
+  });
+
+  test("plusieurs pipelines sans choix : rien ne part de ce dépôt, et il est nommé (échec fermé)", () => {
+    const selection = Selection.empty.toggleRepo(org, "main").toggleRepo(front, "main");
+    const plan = planDispatch(selection, workflowsOf, noChoice, 50);
+    expect(plan.items.map((item) => item.repo)).toEqual(["MaskAI-Frontend"]);
+    expect(plan.unchosenRepos).toEqual(["Mask-AI-FR/MaskAI-Org_service"]);
+    expect(plan.emptyRepos).toEqual([]);
+  });
+
+  test("un choix retenu qui n'existe plus ne compte pas : le dépôt redemande son choix", () => {
+    const plan = planDispatch(Selection.empty.toggleRepo(org, "main"), workflowsOf, () => 99, 50);
+    expect(plan.items).toHaveLength(0);
+    expect(plan.unchosenRepos).toEqual(["Mask-AI-FR/MaskAI-Org_service"]);
+  });
+
   test("compte les lancements sur la branche par défaut (production pour MaskAI)", () => {
-    const plan = planDispatch(Selection.empty.toggleRepo(org, "main"), workflowsOf, 50);
+    const selection = Selection.empty.toggleWorkflow(org, "main", 3, null).toggleWorkflow(org, "main", 4, null);
+    const plan = planDispatch(selection, workflowsOf, noChoice, 50);
     expect(plan.items).toHaveLength(2);
     expect(plan.defaultBranchCount).toBe(2);
     expect(plan.reposWithSeveral).toEqual(["Mask-AI-FR/MaskAI-Org_service"]);
   });
 
   test("un workflow choisi mais désactivé ne part pas ; un dépôt sans rien à lancer est signalé", () => {
-    const selection = Selection.empty.toggleWorkflow(front, "main", 2, [1]);
-    const plan = planDispatch(selection, workflowsOf, 50);
+    const selection = Selection.empty.toggleWorkflow(front, "main", 2, null);
+    const plan = planDispatch(selection, workflowsOf, noChoice, 50);
     expect(plan.items).toHaveLength(0);
     expect(plan.emptyRepos).toEqual(["Mask-AI-FR/MaskAI-Frontend"]);
   });
 
   test("un dépôt dont les workflows n'ont pas pu être lus ne lance rien (échec fermé)", () => {
-    const plan = planDispatch(Selection.empty.toggleRepo(infra, "main"), workflowsOf, 50);
+    const plan = planDispatch(Selection.empty.toggleRepo(infra, "main"), workflowsOf, noChoice, 50);
     expect(plan.items).toHaveLength(0);
     expect(plan.unreadableRepos).toEqual(["Mask-AI-FR/infra"]);
   });
 
   test("au-delà du plafond, le plan est marqué hors limite", () => {
-    const selection = Selection.empty.toggleRepo(front, "main").toggleRepo(org, "main");
-    expect(planDispatch(selection, workflowsOf, 3).overLimit).toBe(false);
-    expect(planDispatch(selection, workflowsOf, 2).overLimit).toBe(true);
+    const selection = Selection.empty.toggleRepo(front, "main").toggleWorkflow(org, "main", 3, null).toggleWorkflow(org, "main", 4, null);
+    expect(planDispatch(selection, workflowsOf, noChoice, 3).overLimit).toBe(false);
+    expect(planDispatch(selection, workflowsOf, noChoice, 2).overLimit).toBe(true);
   });
 });
 

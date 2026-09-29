@@ -3,30 +3,11 @@ import { Component, Input, Reactive, TiniComponent } from "@tinijs/core";
 import type { BranchesBody } from "../../../domain/apiContract.ts";
 import type { BranchSummary } from "../../../domain/githubTypes.ts";
 import type { RepoRef } from "../../../domain/selection.ts";
-import { api, asLoadError, type LoadState } from "../../services/api-client.ts";
+import { api, asLoadError, inTurn, type LoadState } from "../../services/api-client.ts";
 import { sharedSheet } from "../../styles/shared-sheet.ts";
 import { buttonClass } from "../../ui/button-classes.ts";
 import { cn } from "../../ui/class-names.ts";
 import { SELECT_CLASS } from "../../ui/field-classes.ts";
-
-/**
- * Chaque ligne affichée lit ses branches (jusqu'à 25 par page) : 4 lectures partent à la fois vers
- * GitHub, les autres attendent leur tour, pour ne pas lâcher 25 requêtes GraphQL d'un coup.
- */
-const MAX_PARALLEL_LOADS = 4;
-let running = 0;
-const waiting: (() => void)[] = [];
-
-async function inTurn<T>(task: () => Promise<T>): Promise<T> {
-  if (running >= MAX_PARALLEL_LOADS) await new Promise<void>((resolve) => waiting.push(resolve));
-  running += 1;
-  try {
-    return await task();
-  } finally {
-    running -= 1;
-    waiting.shift()?.();
-  }
-}
 
 /**
  * Branche d'un dépôt, choisie dans sa ligne même (une par lancement, décision du 2026-09-24). Toutes

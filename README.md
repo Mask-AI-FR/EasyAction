@@ -73,6 +73,9 @@ repository with its branches and workflows, plus the live status of each one. Yo
 - **Branches and workflows per repository.** Branches are listed in this order: the default branch,
   then active branches, then stale ones. Each workflow shows the status of its latest run on the
   branch you chose.
+- **Pipeline per repository.** Each row has a Pipeline dropdown. A repository with one pipeline uses it
+  automatically; with several, you choose one, and this browser remembers it until you sign out.
+  Ticking a repository runs only its chosen pipeline.
 - **Bulk runs.** Select repositories and workflows, look over the full list of targets in a
   confirmation dialog, and start them all with one request.
 - **Guard for production branches.** If any target is on a repository's default branch, the Run button
